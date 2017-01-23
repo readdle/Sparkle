@@ -40,7 +40,7 @@ SU_EXPORT extern NSString *const SUUpdaterAppcastNotificationKey;
 /*!
  Provides methods to control the behavior of an SUUpdater object.
  */
-__deprecated_msg("See SPUUpdaterDelegate instead")
+//__deprecated_msg("See SPUUpdaterDelegate instead")
 @protocol SUUpdaterDelegate <NSObject>
 @optional
 
