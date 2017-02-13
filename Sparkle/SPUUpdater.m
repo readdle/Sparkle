@@ -260,9 +260,9 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
         shouldPrompt = NO;
     }
     // Does the delegate want to take care of the logic for when we should ask permission to update?
-    else if ([self.delegate respondsToSelector:@selector(updaterShouldPromptForPermissionToCheckForUpdates:)]) {
-        shouldPrompt = [self.delegate updaterShouldPromptForPermissionToCheckForUpdates:self];
-    }
+//    else if ([self.delegate respondsToSelector:@selector(updaterShouldPromptForPermissionToCheckForUpdates:)]) {
+//        shouldPrompt = [self.delegate updaterShouldPromptForPermissionToCheckForUpdates:self];
+//    }
     // Has the user been asked already? And don't ask if the host has a default value set in its Info.plist.
     else if ([self.host objectForKey:SUEnableAutomaticChecksKey] == nil) {
         // Now, we don't want to ask the user for permission to do a weird thing right when they install the app
