@@ -13,10 +13,6 @@
 
 - (instancetype)initWithBundle:(NSBundle *)aBundle;
 
-// Invalidates the info dictionary cache
-// This is not thread safe
--  (void)reloadInfoDictionary;
-
 @property (readonly, copy) NSString *bundlePath;
 @property (readonly, copy) NSString *name;
 @property (readonly, copy) NSString *version;
@@ -24,7 +20,7 @@
 @property (readonly, copy) NSString *displayVersion;
 @property (getter=isRunningOnReadOnlyVolume, readonly) BOOL runningOnReadOnlyVolume;
 @property (readonly, copy) NSString *publicDSAKey;
-@property (readonly, copy) NSString *publicDSAKeyFileKey;
+@property (readonly, nonatomic, copy) NSString *publicDSAKeyFileKey;
 
 - (id)objectForInfoDictionaryKey:(NSString *)key;
 - (BOOL)boolForInfoDictionaryKey:(NSString *)key;

@@ -9,9 +9,8 @@
 #import "SPUSecureCoding.h"
 #import "SULog.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 static NSString *SURootObjectArchiveKey = @"SURootObjectArchive";
 
@@ -26,7 +25,7 @@ NSData * _Nullable SPUArchiveRootObjectSecurely(id<NSSecureCoding> rootObject)
         [keyedArchiver finishEncoding];
         return [data copy];
     } @catch (NSException *exception) {
-        SULog(@"Exception while securely archiving object: %@", exception);
+        SULog(SULogLevelError, @"Exception while securely archiving object: %@", exception);
         [keyedArchiver finishEncoding];
         return nil;
     }
@@ -42,7 +41,7 @@ id<NSSecureCoding> _Nullable SPUUnarchiveRootObjectSecurely(NSData *data, Class 
         [unarchiver finishDecoding];
         return rootObject;
     } @catch (NSException *exception) {
-        SULog(@"Exception while securely unarchiving object: %@", exception);
+        SULog(SULogLevelError, @"Exception while securely unarchiving object: %@", exception);
         [unarchiver finishDecoding];
         return nil;
     }

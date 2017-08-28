@@ -17,9 +17,8 @@
 #import "SPUURLDownload.h"
 #import "SPUDownloadData.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 @interface NSXMLElement (SUAppcastExtensions)
 @property (readonly, copy) NSDictionary *attributesAsDictionary;
@@ -59,18 +58,23 @@
 @synthesize httpHeaders;
 @synthesize items;
 
-- (void)fetchAppcastFromURL:(NSURL *)url completionBlock:(void (^)(NSError *))block
+- (void)fetchAppcastFromURL:(NSURL *)url inBackground:(BOOL)background completionBlock:(void (^)(NSError *))block
 {
     self.completionBlock = block;
 
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:30.0];
+    if (background) {
+        request.networkServiceType = NSURLNetworkServiceTypeBackground;
+    }
+
     if (self.userAgentString) {
         [request setValue:self.userAgentString forHTTPHeaderField:@"User-Agent"];
     }
+    request.networkServiceType = background ? NSURLNetworkServiceTypeBackground : NSURLNetworkServiceTypeDefault;
 
     if (self.httpHeaders) {
         for (NSString *key in self.httpHeaders) {
-            id value = [self.httpHeaders objectForKey:key];
+            NSString *value = [self.httpHeaders objectForKey:key];
             [request setValue:value forHTTPHeaderField:key];
         }
     }
@@ -98,7 +102,7 @@
                                                   userInfo:userInfo]];
             }
         } else {
-            SULog(@"Encountered download feed error: %@", error);
+            SULog(SULogLevelError, @"Encountered download feed error: %@", error);
             
             NSDictionary *userInfo = [NSDictionary
                                       dictionaryWithObject: SULocalizedString(@"An error occurred while downloading the update feed.", nil)
@@ -230,7 +234,7 @@
             [appcastItems addObject:anItem];
 		}
         else {
-            SULog(@"Sparkle Updater: Failed to parse appcast item: %@.\nAppcast dictionary was: %@", errString, dict);
+            SULog(SULogLevelError, @"Sparkle Updater: Failed to parse appcast item: %@.\nAppcast dictionary was: %@", errString, dict);
             if (errorp) *errorp = [NSError errorWithDomain:SUSparkleErrorDomain
                                                       code:SUAppcastParseError
                                                   userInfo:@{NSLocalizedDescriptionKey: errString}];

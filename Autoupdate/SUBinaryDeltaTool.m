@@ -12,10 +12,6 @@
 #include <Foundation/Foundation.h>
 #include <xar/xar.h>
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
-
 #define VERBOSE_FLAG @"--verbose"
 #define VERSION_FLAG @"--version"
 
@@ -23,6 +19,8 @@
 #define APPLY_COMMAND @"apply"
 #define VERSION_COMMAND @"version"
 #define VERSION_ALTERNATE_COMMAND @"--version"
+
+#include "AppKitPrevention.h"
 
 static void printUsage(NSString *programName)
 {
@@ -100,21 +98,25 @@ static BOOL runCreateCommand(NSString *programName, NSArray *args)
         return NO;
     }
     
+    NSString *sourcePath = fileArgs[0];
+    NSString *destPath = fileArgs[1];
+    NSString *patchPath = fileArgs[2];
+
     BOOL isDirectory;
-    if (![[NSFileManager defaultManager] fileExistsAtPath:fileArgs[0] isDirectory:&isDirectory] || !isDirectory) {
+    if (![[NSFileManager defaultManager] fileExistsAtPath:sourcePath isDirectory:&isDirectory] || !isDirectory) {
         printUsage(programName);
         fprintf(stderr, "Error: before-tree must be a directory\n");
         return NO;
     }
     
-    if (![[NSFileManager defaultManager] fileExistsAtPath:fileArgs[1] isDirectory:&isDirectory] || !isDirectory) {
+    if (![[NSFileManager defaultManager] fileExistsAtPath:destPath isDirectory:&isDirectory] || !isDirectory) {
         printUsage(programName);
         fprintf(stderr, "Error: after-tree must be a directory\n");
         return NO;
     }
     
     NSError *createDiffError = nil;
-    if (!createBinaryDelta(fileArgs[0], fileArgs[1], fileArgs[2], patchVersion, verbose, &createDiffError)) {
+    if (!createBinaryDelta(sourcePath, destPath, patchPath, patchVersion, verbose, &createDiffError)) {
         fprintf(stderr, "%s\n", [createDiffError.localizedDescription UTF8String]);
         return NO;
     }
@@ -162,7 +164,7 @@ static BOOL runApplyCommand(NSString *programName, NSArray *args)
     }
     
     NSError *applyDiffError = nil;
-    if (!applyBinaryDelta(fileArgs[0], fileArgs[1], fileArgs[2], verbose, &applyDiffError)) {
+    if (!applyBinaryDelta(fileArgs[0], fileArgs[1], fileArgs[2], verbose, ^(__unused double x){}, &applyDiffError)) {
         fprintf(stderr, "%s\n", [applyDiffError.localizedDescription UTF8String]);
         return NO;
     }

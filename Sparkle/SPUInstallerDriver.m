@@ -26,9 +26,8 @@
 #import "SPUDownloadedUpdate.h"
 #import "SPUInstallationType.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 #define FIRST_INSTALLER_MESSAGE_TIMEOUT 7ull
 
@@ -201,7 +200,7 @@
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(FIRST_INSTALLER_MESSAGE_TIMEOUT * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         SPUInstallerDriver *strongSelf = weakSelf;
         if (strongSelf != nil && strongSelf.currentStage == SPUInstallerNotStarted && currentExtractionAttempts == self.extractionAttempts) {
-            SULog(@"Timeout: Installer never started archive extraction");
+            SULog(SULogLevelError, @"Timeout: Installer never started archive extraction");
             [strongSelf.delegate installerIsRequestingAbortInstallWithError:[NSError errorWithDomain:SUSparkleErrorDomain code:SUInstallationError userInfo:@{ NSLocalizedDescriptionKey:SULocalizedString(@"An error occurred while starting the installer. Please try again later.", nil) }]];
         }
     });
@@ -217,7 +216,7 @@
 - (void)_handleMessageWithIdentifier:(int32_t)identifier data:(NSData *)data
 {
     if (!SPUInstallerMessageTypeIsLegal(self.currentStage, identifier)) {
-        SULog(@"Error: received out of order message with current stage: %d, requested stage: %d", self.currentStage, identifier);
+        SULog(SULogLevelError, @"Error: received out of order message with current stage: %d, requested stage: %d", self.currentStage, identifier);
         return;
     }
     
@@ -256,7 +255,7 @@
         if (updateItemData != nil) {
             [self.installerConnection handleMessageWithIdentifier:SPUSentUpdateAppcastItemData data:updateItemData];
         } else {
-            SULog(@"Error: Archived data to send for appcast item is nil");
+            SULog(SULogLevelError, @"Error: Archived data to send for appcast item is nil");
         }
         
         BOOL canInstallSilently = NO;
@@ -429,7 +428,7 @@
             
             switch (result) {
                 case SUInstallerLauncherFailure:
-                    SULog(@"Error: Failed to gain authorization required to update target");
+                    SULog(SULogLevelError, @"Error: Failed to gain authorization required to update target");
                     completionHandler([NSError errorWithDomain:SUSparkleErrorDomain code:SUInstallationError userInfo:@{ NSLocalizedDescriptionKey:SULocalizedString(@"An error occurred while launching the installer. Please try again later.", nil) }]);
                     break;
                 case SUInstallerLauncherCanceled:

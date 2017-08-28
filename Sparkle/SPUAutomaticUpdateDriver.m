@@ -16,9 +16,8 @@
 #import "SPUUserDriver.h"
 #import "SUErrors.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 @interface SPUAutomaticUpdateDriver () <SPUCoreBasedUpdateDriverDelegate>
 
@@ -61,7 +60,7 @@
         if (error != nil) {
             [self abortUpdateWithError:error];
         } else {
-            [self.coreDriver checkForUpdatesAtAppcastURL:appcastURL withUserAgent:userAgent httpHeaders:httpHeaders includesSkippedUpdates:NO requiresSilentInstall:YES];
+            [self.coreDriver checkForUpdatesAtAppcastURL:appcastURL withUserAgent:userAgent httpHeaders:httpHeaders inBackground:YES includesSkippedUpdates:NO requiresSilentInstall:YES];
         }
     }];
 }
@@ -69,14 +68,14 @@
 - (void)resumeInstallingUpdateWithCompletion:(SPUUpdateDriverCompletion)__unused completionBlock __attribute__((noreturn))
 {
     // Nothing really to do here.. this shouldn't be called.
-    SULog(@"Error: resumeInstallingUpdateWithCompletion: called on SPUAutomaticUpdateDriver");
+    SULog(SULogLevelError, @"Error: resumeInstallingUpdateWithCompletion: called on SPUAutomaticUpdateDriver");
     abort();
 }
 
-- (void)resumeDownloadedUpdate:(SPUDownloadedUpdate *)__unused downloadedUpdate completion:(SPUUpdateDriverCompletion)__unused completionBlock __attribute__((noreturn))
+- (void)resumeUpdate:(id<SPUResumableUpdate>)__unused resumableUpdate completion:(SPUUpdateDriverCompletion)__unused completionBlock __attribute__((noreturn))
 {
     // Nothing really to do here.. this shouldn't be called.
-    SULog(@"Error: resumeDownloadedUpdate:completion: called on SPUAutomaticUpdateDriver");
+    SULog(SULogLevelError, @"Error: resumeDownloadedUpdate:completion: called on SPUAutomaticUpdateDriver");
     abort();
 }
 
@@ -84,7 +83,12 @@
 {
     self.updateItem = updateItem;
     
-    [self.coreDriver downloadUpdateFromAppcastItem:updateItem];
+    if (updateItem.isInformationOnlyUpdate) {
+        [self.coreDriver deferInformationalUpdate:updateItem];
+        [self abortUpdate];
+    } else {
+        [self.coreDriver downloadUpdateFromAppcastItem:updateItem inBackground:YES];
+    }
 }
 
 - (void)installerDidFinishPreparationAndWillInstallImmediately:(BOOL)willInstallImmediately silently:(BOOL)willInstallSilently
@@ -126,7 +130,7 @@
 
 - (void)abortUpdateWithError:(NSError *)error
 {
-    BOOL showNextUpdateImmediately = (error == nil || error.code == SUInstallationAuthorizeLaterError) && (!self.willInstallSilently || self.updateItem.isCriticalUpdate);
+    BOOL showNextUpdateImmediately = (error == nil || error.code == SUInstallationAuthorizeLaterError) && (!self.willInstallSilently || self.updateItem.isCriticalUpdate || self.updateItem.isInformationOnlyUpdate);
     [self.coreDriver abortUpdateAndShowNextUpdateImmediately:showNextUpdateImmediately error:error];
 }
 

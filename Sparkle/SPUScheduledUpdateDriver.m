@@ -12,9 +12,8 @@
 #import "SPUUpdaterDelegate.h"
 #import "SPUUserDriver.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 @interface SPUScheduledUpdateDriver() <SPUUIBasedUpdateDriverDelegate>
 
@@ -44,7 +43,7 @@
             // Don't tell the user about the permission error for scheduled update checks
             [self abortUpdateWithError:nil];
         } else {
-            [self.uiDriver checkForUpdatesAtAppcastURL:appcastURL withUserAgent:userAgent httpHeaders:httpHeaders includesSkippedUpdates:YES];
+            [self.uiDriver checkForUpdatesAtAppcastURL:appcastURL withUserAgent:userAgent httpHeaders:httpHeaders inBackground:YES includesSkippedUpdates:YES];
         }
     }];
 }
@@ -54,9 +53,9 @@
     [self.uiDriver resumeInstallingUpdateWithCompletion:completionBlock];
 }
 
-- (void)resumeDownloadedUpdate:(SPUDownloadedUpdate *)downloadedUpdate completion:(SPUUpdateDriverCompletion)completionBlock
+- (void)resumeUpdate:(id<SPUResumableUpdate>)resumableUpdate completion:(SPUUpdateDriverCompletion)completionBlock
 {
-    [self.uiDriver resumeDownloadedUpdate:downloadedUpdate completion:completionBlock];
+    [self.uiDriver resumeUpdate:resumableUpdate completion:completionBlock];
 }
 
 - (void)basicDriverIsRequestingAbortUpdateWithError:(nullable NSError *)__unused error

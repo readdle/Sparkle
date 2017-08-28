@@ -12,11 +12,11 @@
 #import "SUAppcastItem.h"
 #import "SUVersionDisplayProtocol.h"
 #import "SUHost.h"
-#import "SPUUpdatePermissionPrompt.h"
+#import "SUUpdatePermissionPrompt.h"
 #import "SUStatusController.h"
 #import "SUUpdateAlert.h"
 #import "SULocalizations.h"
-#import "SPUApplicationInfo.h"
+#import "SUApplicationInfo.h"
 
 @interface SPUStandardUserDriver ()
 
@@ -69,14 +69,14 @@
 
 #pragma mark Update Permission
 
-- (void)showUpdatePermissionRequest:(SPUUpdatePermissionRequest *)request reply:(void (^)(SPUUpdatePermissionResponse *))reply
+- (void)showUpdatePermissionRequest:(SPUUpdatePermissionRequest *)request reply:(void (^)(SUUpdatePermissionResponse *))reply
 {
     dispatch_async(dispatch_get_main_queue(), ^{
         // This shows a modal alert dialog which unlike other alerts cannot be closed until the user makes a decision
         // This means that we can never programatically close the dialog if something goes horribly wrong
         // But this dialog should only show up once in the application's lifetime so this may be an OK decision
         
-        [SPUUpdatePermissionPrompt promptWithHost:self.host request:request reply:reply];
+        [SUUpdatePermissionPrompt promptWithHost:self.host request:request reply:reply];
     });
 }
 
@@ -90,7 +90,7 @@
     // If the app is a menubar app or the like, we need to focus it first and alter the
     // update prompt to behave like a normal window. Otherwise if the window were hidden
     // there may be no way for the application to be activated to make it visible again.
-    if ([SPUApplicationInfo isBackgroundApplication:NSApp]) {
+    if ([SUApplicationInfo isBackgroundApplication:[NSApplication sharedApplication]]) {
         [self.activeUpdateAlert.window setHidesOnDeactivate:NO];
         
         [NSApp activateIgnoringOtherApps:YES];
@@ -157,6 +157,16 @@
     }];
 }
 
+- (void)showInformationalUpdateFoundWithAppcastItem:(SUAppcastItem *)appcastItem userInitiated:(BOOL)__unused userInitiated reply:(void (^)(SPUInformationalUpdateAlertChoice))reply
+{
+    [self showUpdateFoundWithAlertHandler:^SUUpdateAlert *(SPUStandardUserDriver *weakSelf, SUHost *host, id<SUVersionDisplay> versionDisplayer) {
+        return [[SUUpdateAlert alloc] initWithAppcastItem:appcastItem host:host versionDisplayer:versionDisplayer informationalCompletionBlock:^(SPUInformationalUpdateAlertChoice choice) {
+            reply(choice);
+            weakSelf.activeUpdateAlert = nil;
+        }];
+    }];
+}
+
 - (void)showUpdateReleaseNotesWithDownloadData:(SPUDownloadData *)downloadData
 {
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -210,7 +220,7 @@
         
         // For background applications, obtain focus.
         // Useful if the update check is requested from another app like System Preferences.
-        if ([SPUApplicationInfo isBackgroundApplication:NSApp])
+        if ([SUApplicationInfo isBackgroundApplication:[NSApplication sharedApplication]])
         {
             [NSApp activateIgnoringOtherApps:YES];
         }
@@ -283,9 +293,9 @@
         
         // When showing a modal alert we need to ensure that background applications
         // are focused to inform the user since there is no dock icon to notify them.
-        if ([SPUApplicationInfo isBackgroundApplication:NSApp]) { [NSApp activateIgnoringOtherApps:YES]; }
+        if ([SUApplicationInfo isBackgroundApplication:[NSApplication sharedApplication]]) { [[NSApplication sharedApplication] activateIgnoringOtherApps:YES]; }
         
-        [alert setIcon:[SPUApplicationInfo bestIconForBundle:self.host.bundle]];
+        [alert setIcon:[SUApplicationInfo bestIconForHost:self.host]];
         [alert runModal];
         
         if ([delegate respondsToSelector:@selector(standardUserDriverDidShowModalAlert)]) {
@@ -320,7 +330,7 @@
     [self.coreComponent cancelDownloadStatus];
 }
 
-- (void)showDownloadDidReceiveExpectedContentLength:(NSUInteger)expectedContentLength
+- (void)showDownloadDidReceiveExpectedContentLength:(uint64_t)expectedContentLength
 {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.statusController setMaxProgressValue:expectedContentLength];
@@ -333,10 +343,17 @@
                                           countStyle:NSByteCountFormatterCountStyleFile];
 }
 
-- (void)showDownloadDidReceiveDataOfLength:(NSUInteger)length
+- (void)showDownloadDidReceiveDataOfLength:(uint64_t)length
 {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.statusController setProgressValue:[self.statusController progressValue] + (double)length];
+        double newProgressValue = [self.statusController progressValue] + (double)length;
+        
+        // In case our expected content length was incorrect
+        if (newProgressValue > [self.statusController maxProgressValue]) {
+            [self.statusController setMaxProgressValue:newProgressValue];
+        }
+        
+        [self.statusController setProgressValue:newProgressValue];
         if ([self.statusController maxProgressValue] > 0.0)
             [self.statusController setStatusText:[NSString stringWithFormat:SULocalizedString(@"%@ of %@", nil), [self localizedStringFromByteCount:(long long)self.statusController.progressValue], [self localizedStringFromByteCount:(long long)self.statusController.maxProgressValue]]];
         else

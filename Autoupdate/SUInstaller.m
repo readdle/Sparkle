@@ -13,13 +13,11 @@
 #import "SUHost.h"
 #import "SUConstants.h"
 #import "SULog.h"
-#import "SUParameterAssert.h"
 #import "SUErrors.h"
 #import "SPUInstallationType.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 @implementation SUInstaller
 
@@ -34,8 +32,8 @@
 
 + (nullable NSString *)installSourcePathInUpdateFolder:(NSString *)inUpdateFolder forHost:(SUHost *)host isPackage:(BOOL *)isPackagePtr isGuided:(BOOL *)isGuidedPtr
 {
-    SUParameterAssert(inUpdateFolder);
-    SUParameterAssert(host);
+    NSParameterAssert(inUpdateFolder);
+    NSParameterAssert(host);
 
     // Search subdirectories for the application
     NSString *currentFile,
@@ -108,12 +106,12 @@
         *isGuidedPtr = isGuided;
 
     if (!newAppDownloadPath) {
-        SULog(@"Searched %@ for %@.(app|pkg)", inUpdateFolder, bundleFileNameNoExtension);
+        SULog(SULogLevelError, @"Searched %@ for %@.(app|pkg)", inUpdateFolder, bundleFileNameNoExtension);
     }
     return newAppDownloadPath;
 }
 
-+ (nullable id<SPUInstallerProtocol>)installerForHost:(SUHost *)host expectedInstallationType:(NSString *)expectedInstallationType updateDirectory:(NSString *)updateDirectory versionComparator:(id <SUVersionComparison>)comparator error:(NSError * __autoreleasing *)error
++ (nullable id<SUInstallerProtocol>)installerForHost:(SUHost *)host expectedInstallationType:(NSString *)expectedInstallationType updateDirectory:(NSString *)updateDirectory error:(NSError * __autoreleasing *)error
 {
     BOOL isPackage = NO;
     BOOL isGuided = NO;
@@ -129,7 +127,7 @@
     // Make sure we find the type of installer that we were expecting to find
     // We shouldn't implicitly trust the installation type fed into here from the appcast because the installation type helps us determine
     // ahead of time whether or not this installer tool should be ran as root or not
-    id <SPUInstallerProtocol> installer = nil;
+    id <SUInstallerProtocol> installer = nil;
     if (isPackage && isGuided) {
         if (![expectedInstallationType isEqualToString:SPUInstallationTypeGuidedPackage]) {
             if (error != NULL) {
@@ -154,7 +152,7 @@
         } else {
             NSString *normalizedInstallationPath = nil;
             if (SPARKLE_NORMALIZE_INSTALLED_APPLICATION_NAME) {
-                normalizedInstallationPath = [[self class] normalizedInstallationPathForHost:host];
+                normalizedInstallationPath = [self normalizedInstallationPathForHost:host];
             }
             
             // If we have a normalized path, we'll install to "#{CFBundleName}.app", but only if that path doesn't already exist. If we're "Foo 4.2.app," and there's a "Foo.app" in this directory, we don't want to overwrite it! But if there's no "Foo.app," we'll take that name.
@@ -166,7 +164,7 @@
                 installationPath = host.bundlePath;
             }
             
-            installer = [[SUPlainInstaller alloc] initWithHost:host applicationPath:newDownloadPath installationPath:installationPath versionComparator:comparator];
+            installer = [[SUPlainInstaller alloc] initWithHost:host bundlePath:newDownloadPath installationPath:installationPath];
         }
     }
     
@@ -178,7 +176,7 @@
     NSBundle *bundle = host.bundle;
     assert(bundle != nil);
     
-    NSString *normalizedAppPath = [[[bundle bundlePath] stringByDeletingLastPathComponent] stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.%@", [bundle objectForInfoDictionaryKey:(__bridge NSString *)kCFBundleNameKey], [[bundle bundlePath] pathExtension]]];
+    NSString *normalizedAppPath = [[[bundle bundlePath] stringByDeletingLastPathComponent] stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.%@", [host objectForInfoDictionaryKey:(__bridge NSString *)kCFBundleNameKey], [[bundle bundlePath] pathExtension]]];
     
     return normalizedAppPath;
 }

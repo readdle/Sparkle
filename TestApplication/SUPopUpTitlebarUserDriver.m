@@ -18,8 +18,8 @@
 @property (nonatomic) BOOL addedAccessory;
 @property (nonatomic) NSButton *updateButton;
 @property (nonatomic, copy) void (^updateButtonAction)(NSButton *);
-@property (nonatomic) NSUInteger expectedContentLength;
-@property (nonatomic) NSUInteger contentLengthDownloaded;
+@property (nonatomic) uint64_t expectedContentLength;
+@property (nonatomic) uint64_t contentLengthDownloaded;
 
 @end
 
@@ -115,11 +115,11 @@
 
 #pragma mark Update Permission
 
-- (void)showUpdatePermissionRequest:(SPUUpdatePermissionRequest *)__unused request reply:(void (^)(SPUUpdatePermissionResponse *))reply
+- (void)showUpdatePermissionRequest:(SPUUpdatePermissionRequest *)__unused request reply:(void (^)(SUUpdatePermissionResponse *))reply
 {
     // Just make a decision..
     dispatch_async(dispatch_get_main_queue(), ^{
-        SPUUpdatePermissionResponse *response = [[SPUUpdatePermissionResponse alloc] initWithAutomaticUpdateChecks:YES sendSystemProfile:NO];
+        SUUpdatePermissionResponse *response = [[SUUpdatePermissionResponse alloc] initWithAutomaticUpdateChecks:YES sendSystemProfile:NO];
         reply(response);
     });
 }
@@ -181,6 +181,16 @@
                     abort();
             }
         }];
+    });
+}
+
+- (void)showInformationalUpdateFoundWithAppcastItem:(SUAppcastItem *)appcastItem userInitiated:(BOOL)__unused userInitiated reply:(void (^)(SPUInformationalUpdateAlertChoice))reply
+{
+    // Todo: show user interface for this
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSLog(@"Found info URL: %@", appcastItem.infoURL);
+        
+        reply(SPUDismissInformationalNoticeChoice);
     });
 }
 
@@ -268,7 +278,7 @@
     });
 }
 
-- (void)showDownloadDidReceiveExpectedContentLength:(NSUInteger)expectedContentLength
+- (void)showDownloadDidReceiveExpectedContentLength:(uint64_t)expectedContentLength
 {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self addUpdateButtonWithTitle:@"Downloading…"];
@@ -277,12 +287,20 @@
     });
 }
 
-- (void)showDownloadDidReceiveDataOfLength:(NSUInteger)length
+- (void)showDownloadDidReceiveDataOfLength:(uint64_t)length
 {
     dispatch_async(dispatch_get_main_queue(), ^{
         self.contentLengthDownloaded += length;
-        double progress = (double)self.contentLengthDownloaded / self.expectedContentLength;
-        [self addUpdateButtonWithTitle:[NSString stringWithFormat:@"Downloading (%0.0f%%)", progress * 100] action:nil];
+        
+        // In case our expected content length was incorrect
+        if (self.contentLengthDownloaded > self.expectedContentLength) {
+            self.expectedContentLength = self.contentLengthDownloaded;
+        }
+        
+        if (self.expectedContentLength > 0) {
+            double progress = (double)self.contentLengthDownloaded / self.expectedContentLength;
+            [self addUpdateButtonWithTitle:[NSString stringWithFormat:@"Downloading (%0.0f%%)", progress * 100] action:nil];
+        }
     });
 }
 

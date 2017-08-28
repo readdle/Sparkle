@@ -12,9 +12,8 @@
 #import "SUConstants.h"
 #import "SPUInstallationType.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 static NSString *SUAppcastItemDeltaUpdatesKey = @"deltaUpdates";
 static NSString *SUAppcastItemDisplayVersionStringKey = @"displayVersionString";
@@ -65,7 +64,7 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
         _fileURL = [decoder decodeObjectOfClass:[NSURL class] forKey:SUAppcastItemFileURLKey];
         _infoURL = [decoder decodeObjectOfClass:[NSURL class] forKey:SUAppcastItemInfoURLKey];
         
-        _contentLength = (NSUInteger)[decoder decodeIntegerForKey:SUAppcastItemContentLengthKey];
+        _contentLength = (uint64_t)[decoder decodeInt64ForKey:SUAppcastItemContentLengthKey];
         
         _installationType = [decoder decodeObjectOfClass:[NSString class] forKey:SUAppcastItemInstallationTypeKey];
         if (!SPUValidInstallationType(_installationType)) {
@@ -106,7 +105,7 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
         [encoder encodeObject:self.infoURL forKey:SUAppcastItemInfoURLKey];
     }
     
-    [encoder encodeInteger:(NSInteger)self.contentLength forKey:SUAppcastItemContentLengthKey];
+    [encoder encodeInt64:(int64_t)self.contentLength forKey:SUAppcastItemContentLengthKey];
     
     if (self.itemDescription != nil) {
         [encoder encodeObject:self.itemDescription forKey:SUAppcastItemDescriptionKey];
@@ -182,7 +181,7 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
         }
         if (newVersion == nil) // no sparkle:version attribute anywhere?
         {
-            SULog(@"warning: <%@> for URL '%@' is missing %@ attribute. Version comparison may be unreliable. Please always specify %@", SURSSElementEnclosure, [enclosure objectForKey:SURSSAttributeURL], SUAppcastAttributeVersion, SUAppcastAttributeVersion);
+            SULog(SULogLevelError, @"warning: <%@> for URL '%@' is missing %@ attribute. Version comparison may be unreliable. Please always specify %@", SURSSElementEnclosure, [enclosure objectForKey:SURSSAttributeURL], SUAppcastAttributeVersion, SUAppcastAttributeVersion);
 
             // Separate the url by underscores and take the last component, as that'll be closest to the end,
             // then we remove the extension. Hopefully, this will be the version.
@@ -207,7 +206,7 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
         NSString *theInfoURL = [dict objectForKey:SURSSElementLink];
         if (theInfoURL) {
             if (![theInfoURL isKindOfClass:[NSString class]]) {
-                SULog(@"%@ -%@ Info URL is not of valid type.", NSStringFromClass([self class]), NSStringFromSelector(_cmd));
+                SULog(SULogLevelError, @"%@ -%@ Info URL is not of valid type.", NSStringFromClass([self class]), NSStringFromSelector(_cmd));
             } else {
                 _infoURL = [NSURL URLWithString:theInfoURL];
             }
@@ -232,16 +231,11 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
         
         if (enclosureURLString) {
             NSString *enclosureLengthString = [enclosure objectForKey:SURSSAttributeLength];
-            NSInteger contentLength = 0;
+            long long contentLength = 0;
             if (enclosureLengthString != nil) {
-                contentLength = [enclosureLengthString integerValue];
-            } else {
-                static dispatch_once_t onceToken;
-                dispatch_once(&onceToken, ^{
-                    SULog(@"warning: <%@> for URL '%@' is missing %@ attribute. Downloading progress may be unreliable. Please always specify %@", SURSSElementEnclosure, [enclosure objectForKey:SURSSAttributeURL], SURSSAttributeLength, SURSSAttributeLength);
-                });
+                contentLength = [enclosureLengthString longLongValue];
             }
-            _contentLength = (contentLength > 0) ? (NSUInteger)contentLength : 0;
+            _contentLength = (contentLength > 0) ? (uint64_t)contentLength : 0;
         }
 
         if (enclosureURLString) {
@@ -277,7 +271,7 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
             }
             return nil;
         } else if ([_installationType isEqualToString:SPUInstallationTypeInteractivePackage]) {
-            SULog(@"warning: '%@' for %@ is deprecated. Use '%@' instead.", SPUInstallationTypeInteractivePackage, SUAppcastAttributeInstallationType, SPUInstallationTypeGuidedPackage);
+            SULog(SULogLevelDefault, @"warning: '%@' for %@ is deprecated. Use '%@' instead.", SPUInstallationTypeInteractivePackage, SUAppcastAttributeInstallationType, SPUInstallationTypeGuidedPackage);
         }
 
         // Find the appropriate release notes URL.
@@ -285,7 +279,7 @@ static NSString *SUAppcastItemInstallationTypeKey = @"SUAppcastItemInstallationT
         if (releaseNotesString) {
             NSURL *url = [NSURL URLWithString:releaseNotesString];
             if ([url isFileURL]) {
-                SULog(@"Release notes with file:// URLs are not supported");
+                SULog(SULogLevelError, @"Release notes with file:// URLs are not supported");
             } else {
                 _releaseNotesURL = url;
             }

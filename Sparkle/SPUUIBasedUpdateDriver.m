@@ -16,10 +16,10 @@
 #import "SUErrors.h"
 #import "SPUURLDownload.h"
 #import "SPUDownloadData.h"
+#import "SPUResumableUpdate.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 @interface SPUUIBasedUpdateDriver() <SPUCoreBasedUpdateDriverDelegate>
 
@@ -77,9 +77,9 @@
     [self.coreDriver preflightForUpdatePermissionPreventingInstallerInteraction:preventsInstallerInteraction reply:reply];
 }
 
-- (void)checkForUpdatesAtAppcastURL:(NSURL *)appcastURL withUserAgent:(NSString *)userAgent httpHeaders:(NSDictionary * _Nullable)httpHeaders includesSkippedUpdates:(BOOL)includesSkippedUpdates
+- (void)checkForUpdatesAtAppcastURL:(NSURL *)appcastURL withUserAgent:(NSString *)userAgent httpHeaders:(NSDictionary * _Nullable)httpHeaders inBackground:(BOOL)background includesSkippedUpdates:(BOOL)includesSkippedUpdates
 {
-    [self.coreDriver checkForUpdatesAtAppcastURL:appcastURL withUserAgent:userAgent httpHeaders:httpHeaders includesSkippedUpdates:includesSkippedUpdates requiresSilentInstall:NO];
+    [self.coreDriver checkForUpdatesAtAppcastURL:appcastURL withUserAgent:userAgent httpHeaders:httpHeaders inBackground:background includesSkippedUpdates:includesSkippedUpdates requiresSilentInstall:NO];
 }
 
 - (void)resumeInstallingUpdateWithCompletion:(SPUUpdateDriverCompletion)completionBlock
@@ -88,10 +88,13 @@
     [self.coreDriver resumeInstallingUpdateWithCompletion:completionBlock];
 }
 
-- (void)resumeDownloadedUpdate:(SPUDownloadedUpdate *)downloadedUpdate completion:(SPUUpdateDriverCompletion)completionBlock
+- (void)resumeUpdate:(id<SPUResumableUpdate>)resumableUpdate completion:(SPUUpdateDriverCompletion)completionBlock
 {
-    self.resumingDownloadedUpdate = YES;
-    [self.coreDriver resumeDownloadedUpdate:downloadedUpdate completion:completionBlock];
+    // Informational downloads shouldn't be presented as updates to be downloaded
+    if (!resumableUpdate.updateItem.isInformationOnlyUpdate) {
+        self.resumingDownloadedUpdate = YES;
+    }
+    [self.coreDriver resumeUpdate:resumableUpdate completion:completionBlock];
 }
 
 - (void)basicDriverDidFinishLoadingAppcast
@@ -103,7 +106,23 @@
 
 - (void)basicDriverDidFindUpdateWithAppcastItem:(SUAppcastItem *)updateItem
 {
-    if (self.resumingDownloadedUpdate) {
+    if (updateItem.isInformationOnlyUpdate) {
+        assert(!self.resumingDownloadedUpdate);
+        assert(!self.resumingInstallingUpdate);
+        
+        [self.userDriver showInformationalUpdateFoundWithAppcastItem:updateItem userInitiated:self.userInitiated reply:^(SPUInformationalUpdateAlertChoice choice) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                switch (choice) {
+                    case SPUSkipThisInformationalVersionChoice:
+                        [self.host setObject:[updateItem versionString] forUserDefaultsKey:SUSkippedVersionKey];
+                        // Fall through
+                    case SPUDismissInformationalNoticeChoice:
+                        [self.delegate uiDriverIsRequestingAbortUpdateWithError:nil];
+                        break;
+                }
+            });
+        }];
+    } else if (self.resumingDownloadedUpdate) {
         [self.userDriver showDownloadedUpdateFoundWithAppcastItem:updateItem userInitiated:self.userInitiated reply:^(SPUUpdateAlertChoice choice) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self.host setObject:nil forUserDefaultsKey:SUSkippedVersionKey];
@@ -127,7 +146,7 @@
                 [self.host setObject:nil forUserDefaultsKey:SUSkippedVersionKey];
                 switch (choice) {
                     case SPUInstallUpdateChoice:
-                        [self.coreDriver downloadUpdateFromAppcastItem:updateItem];
+                        [self.coreDriver downloadUpdateFromAppcastItem:updateItem inBackground:NO];
                         break;
                     case SPUSkipThisVersionChoice:
                         [self.host setObject:[updateItem versionString] forUserDefaultsKey:SUSkippedVersionKey];
@@ -181,12 +200,12 @@
     }];
 }
 
-- (void)downloadDriverDidReceiveExpectedContentLength:(NSUInteger)expectedContentLength
+- (void)downloadDriverDidReceiveExpectedContentLength:(uint64_t)expectedContentLength
 {
     [self.userDriver showDownloadDidReceiveExpectedContentLength:expectedContentLength];
 }
 
-- (void)downloadDriverDidReceiveDataOfLength:(NSUInteger)length
+- (void)downloadDriverDidReceiveDataOfLength:(uint64_t)length
 {
     [self.userDriver showDownloadDidReceiveDataOfLength:length];
 }

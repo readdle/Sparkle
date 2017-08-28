@@ -11,7 +11,7 @@
 #import "SPUUpdaterSettings.h"
 #import "SUHost.h"
 #import "SPUUpdatePermissionRequest.h"
-#import "SPUUpdatePermissionResponse.h"
+#import "SUUpdatePermissionResponse.h"
 #import "SPUUpdateDriver.h"
 #import "SUConstants.h"
 #import "SULog.h"
@@ -28,11 +28,10 @@
 #import "SPUXPCServiceInfo.h"
 #import "SPUUpdaterCycle.h"
 #import "SPUUpdaterTimer.h"
-#import "SPUDownloadedUpdate.h"
+#import "SPUResumableUpdate.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 NSString *const SUUpdaterDidFinishLoadingAppCastNotification = @"SUUpdaterDidFinishLoadingAppCastNotification";
 NSString *const SUUpdaterDidFindValidUpdateNotification = @"SUUpdaterDidFindValidUpdateNotification";
@@ -55,7 +54,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 @property (nonatomic, readonly) SPUUpdaterTimer *updaterTimer;
 @property (nonatomic) BOOL startedUpdater;
 @property (nonatomic, copy) void (^preStartedScheduledUpdateBlock)(void);
-@property (nonatomic, nullable) SPUDownloadedUpdate *resumableUpdate;
+@property (nonatomic, nullable) id<SPUResumableUpdate> resumableUpdate;
 
 @property (nonatomic) BOOL loggedATSWarning;
 @property (nonatomic) BOOL loggedDSAWarning;
@@ -116,7 +115,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 // To prevent subclasses from doing something bad based on older Sparkle code
 - (instancetype)initForBundle:(NSBundle *)__unused bundle
 {
-    SULog(@"-[%@ initForBundle:] is not implemented anymore.", NSStringFromClass([self class]));
+    SULog(SULogLevelError, @"-[%@ initForBundle:] is not implemented anymore.", NSStringFromClass([self class]));
     abort();
     return nil;
 }
@@ -124,7 +123,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 // To prevent trying to stick an SUUpdater in a nib or initializing it in an incorrect way
 - (instancetype)init
 {
-    SULog(@"-[%@ init] is not implemented. If you want to drop an updater into a nib, see SPUStandardUpdaterController.", NSStringFromClass([self class]));
+    SULog(SULogLevelError, @"-[%@ init] is not implemented. If you want to drop an updater into a nib, see SPUStandardUpdaterController.", NSStringFromClass([self class]));
     abort();
     return nil;
 }
@@ -202,7 +201,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
         if (foundATSPersistentIssue || foundATSMainBundleIssue) {
             if (!self.loggedATSWarning) {
                 // Just log a warning. Don't outright fail in case we are wrong (eg: app is linked on an old SDK where ATS doesn't take effect)
-                SULog(@"The feed URL (%@) may need to change to use HTTPS.\nFor more information: https://sparkle-project.org/documentation/app-transport-security", [feedURL absoluteString]);
+                SULog(SULogLevelDefault, @"The feed URL (%@) may need to change to use HTTPS.\nFor more information: https://sparkle-project.org/documentation/app-transport-security", [feedURL absoluteString]);
                 
                 self.loggedATSWarning = YES;
             }
@@ -232,7 +231,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
                 // Deprecated because we pass the downloaded archive to the installer and the installer has no way of knowing where the download came from.
                 // Even if it did, the server and the download on it could still be compromised. But if a DSA signature was used, the private key should
                 // not be stored on the server serving the update
-                SULog(@"DEPRECATION: Serving updates without a DSA key is now deprecated and may be removed from a future release. See Sparkle's documentation for more information.");
+                SULog(SULogLevelDefault, @"DEPRECATION: Serving updates without a DSA key is now deprecated and may be removed from a future release. See Sparkle's documentation for more information.");
                 
                 self.loggedDSAWarning = YES;
             }
@@ -247,8 +246,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 - (void)startUpdateCycle
 {
     BOOL shouldPrompt = NO;
-    NSDate *firstLaunchDate = [self.host objectForUserDefaultsKey:SUTimeIntervalAtFirstLaunchKey];
-    NSDate *currentDate = [NSDate date];
+    BOOL hasLaunchedBefore = [self.host boolForUserDefaultsKey:SUHasLaunchedBeforeKey];
 
     // If the user has been asked about automatic checks, don't bother prompting
     // When the user answers to the permission prompt, this will be set to either @YES or @NO instead of nil
@@ -265,23 +263,12 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 //    }
     // Has the user been asked already? And don't ask if the host has a default value set in its Info.plist.
     else if ([self.host objectForKey:SUEnableAutomaticChecksKey] == nil) {
-        // Now, we don't want to ask the user for permission to do a weird thing right when they install the app
-        // We wait until another launch after a few hours have passed, unless explicitly overridden via SUPromptUserOnFirstLaunchKey.
-        
-        if ([self.host objectForKey:SUPromptUserOnFirstLaunchKey] != nil) {
-            shouldPrompt = YES;
-        } else if (firstLaunchDate != nil) {
-            NSTimeInterval intervalSinceFirstLaunch = [currentDate timeIntervalSinceDate:firstLaunchDate];
-            // We want to prompt if more than (or equal to) 'SUDefaultUpdatePermissionPromptInterval' seconds have passed since the first launch
-            // If the first launch time is after (or equal to) our current date, then something may have gone wrong in the system - prompt to be on the safe side
-            if (intervalSinceFirstLaunch >= SUDefaultUpdatePermissionPromptInterval || intervalSinceFirstLaunch <= 0) {
-                shouldPrompt = YES;
-            }
-        }
+        // We wait until the second launch of the updater for this host bundle, unless explicitly overridden via SUPromptUserOnFirstLaunchKey.
+        shouldPrompt = [self.host objectForKey:SUPromptUserOnFirstLaunchKey] || hasLaunchedBefore;
     }
     
-    if (firstLaunchDate == nil) {
-        [self.host setObject:currentDate forUserDefaultsKey:SUTimeIntervalAtFirstLaunchKey];
+    if (!hasLaunchedBefore) {
+        [self.host setBool:YES forUserDefaultsKey:SUHasLaunchedBeforeKey];
     }
 
     if (shouldPrompt) {
@@ -297,7 +284,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
         SPUUpdatePermissionRequest *updatePermissionRequest = [[SPUUpdatePermissionRequest alloc] initWithSystemProfile:profileInfo];
         
         __weak SPUUpdater *weakSelf = self;
-        [self.userDriver showUpdatePermissionRequest:updatePermissionRequest reply:^(SPUUpdatePermissionResponse *response) {
+        [self.userDriver showUpdatePermissionRequest:updatePermissionRequest reply:^(SUUpdatePermissionResponse *response) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 SPUUpdater *strongSelf = weakSelf;
                 if (strongSelf != nil) {
@@ -320,9 +307,9 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
     }
 }
 
-- (void)updatePermissionRequestFinishedWithResponse:(SPUUpdatePermissionResponse *)response
+- (void)updatePermissionRequestFinishedWithResponse:(SUUpdatePermissionResponse *)response
 {
-    [self.host setBool:response.sendSystemProfile forUserDefaultsKey:SUSendProfileInfoKey];
+    [self setSendsSystemProfile:response.sendSystemProfile];
     [self setAutomaticallyChecksForUpdates:response.automaticUpdateChecks];
 }
 
@@ -526,18 +513,14 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
         [self scheduleNextUpdateCheck];
         return;
     }
-    
-    // Reload our host bundle information in case its current cache is out of date
-    // We could have updated the bundle before for example without terminating this updater process
-    [self.host reloadInfoDictionary];
 
     // Because an application can change the configuration (eg: the feed url) at any point, we should always check if it's valid
     NSError *configurationError = nil;
     if (![self checkIfConfiguredProperly:&configurationError]) {
         // Don't think we should schedule a next update check if the bundle has been misconfigured once,
         // which would mean something is really off
-        SULog(@"Sparkle configuration error (%ld): %@", (long)configurationError.code, configurationError.localizedDescription);
-        SULog(@"Disabling scheduled updates..");
+        SULog(SULogLevelError, @"Sparkle configuration error (%ld): %@", (long)configurationError.code, configurationError.localizedDescription);
+        SULog(SULogLevelDefault, @"Disabling scheduled updates..");
         
         [self.driver abortUpdateWithError:configurationError];
         self.driver = nil;
@@ -548,7 +531,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
     NSURL *theFeedURL = [self parameterizedFeedURL];
     if (theFeedURL) {
         __weak SPUUpdater *weakSelf = self;
-        SPUUpdateDriverCompletion completionBlock = ^(BOOL shouldShowUpdateImmediately, SPUDownloadedUpdate * _Nullable resumableUpdate) {
+        SPUUpdateDriverCompletion completionBlock = ^(BOOL shouldShowUpdateImmediately, id<SPUResumableUpdate> _Nullable resumableUpdate) {
             SPUUpdater *strongSelf = weakSelf;
             if (strongSelf != nil) {
                 strongSelf.resumableUpdate = resumableUpdate;
@@ -563,7 +546,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
         if (installerInProgress) {
             [self.driver resumeInstallingUpdateWithCompletion:completionBlock];
         } else if (self.resumableUpdate != nil) {
-            [self.driver resumeDownloadedUpdate:(SPUDownloadedUpdate * _Nonnull)self.resumableUpdate completion:completionBlock];
+            [self.driver resumeUpdate:(id<SPUResumableUpdate> _Nonnull)self.resumableUpdate completion:completionBlock];
         } else {
             [self.driver checkForUpdatesAtAppcastURL:theFeedURL withUserAgent:[self userAgentString] httpHeaders:[self httpHeaders] preventingInstallerInteraction:preventsInstallerInteraction completion:completionBlock];
         }
@@ -628,7 +611,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 - (void)setFeedURL:(NSURL * _Nullable)feedURL
 {
     if (![NSThread isMainThread]) {
-        SULog(@"This method must be called on the main thread");
+        SULog(SULogLevelError, @"This method must be called on the main thread");
         abort();
     }
 
@@ -639,7 +622,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 - (BOOL)retrieveFeedURL:(NSURL * __autoreleasing *)feedURL error:(NSError * __autoreleasing *)error
 {
     if (![NSThread isMainThread]) {
-        SULog(@"This method must be called on the main thread");
+        SULog(SULogLevelError, @"This method must be called on the main thread");
         abort();
     }
     
@@ -677,7 +660,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
     NSURL *feedURL = nil;
     NSError *feedError = nil;
     if (![self retrieveFeedURL:&feedURL error:&feedError]) {
-        SULog(@"Fatal Feed Error (%ld): %@", feedError.code, feedError.localizedDescription);
+        SULog(SULogLevelError, @"Fatal Feed Error (%ld): %@", feedError.code, feedError.localizedDescription);
         abort();
     }
     return feedURL;
@@ -719,7 +702,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 {
     NSURL *baseFeedURL = nil;
     if (![self retrieveFeedURL:&baseFeedURL error:NULL]) {
-        SULog(@"Unexpected error: base feed URL is invalid during -parameterizedFeedURL");
+        SULog(SULogLevelError, @"Unexpected error: base feed URL is invalid during -parameterizedFeedURL");
         return nil;
     }
     
@@ -763,7 +746,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
     // Clean it up so it's a valid URL
     NSURL *parameterizedFeedURL = [NSURL URLWithString:appcastStringWithProfile];
     if (parameterizedFeedURL == nil) {
-        SULog(@"Unexpected error: parameterized feed URL formed from %@ is invalid", appcastStringWithProfile);
+        SULog(SULogLevelError, @"Unexpected error: parameterized feed URL formed from %@ is invalid", appcastStringWithProfile);
     }
     return parameterizedFeedURL;
 }
@@ -797,7 +780,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
                 // Proceed as normal if there's no resumable updates
                 completionHandler(regularCheckInterval);
             } else {
-                if (!installationInfo.canSilentlyInstall || [installationInfo.appcastItem isCriticalUpdate]) {
+                if (!installationInfo.canSilentlyInstall || [installationInfo.appcastItem isCriticalUpdate] || [installationInfo.appcastItem isInformationOnlyUpdate]) {
                     completionHandler(MIN(regularCheckInterval, SUImpatientUpdateCheckInterval));
                 } else {
                     completionHandler(MAX(regularCheckInterval, SUImpatientUpdateCheckInterval));

@@ -11,9 +11,8 @@
 #import "SUErrors.h"
 #import "SULog.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 @interface SUPackageInstaller ()
 
@@ -64,7 +63,7 @@ static NSString *SUOpenUtilityPath = @"/usr/bin/open";
         [installer waitUntilExit];
     }
     @catch (NSException *exception) {
-        SULog(@"Error: Failed to launch package installer: %@", exception);
+        SULog(SULogLevelError, @"Error: Failed to launch package installer: %@", exception);
         if (error != NULL) {
             *error = [NSError errorWithDomain:SUSparkleErrorDomain code:SUInstallationError userInfo:@{ NSLocalizedDescriptionKey: @"Package installer failed to launch." }];
         }
@@ -77,10 +76,6 @@ static NSString *SUOpenUtilityPath = @"/usr/bin/open";
 - (BOOL)canInstallSilently
 {
     return NO;
-}
-
-- (void)cleanup
-{
 }
 
 @end

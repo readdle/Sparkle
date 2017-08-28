@@ -10,8 +10,6 @@
 #import <SparkleCore/SparkleCore.h>
 #import "SPUCommandLineUserDriver.h"
 
-void _SULogDisableStandardErrorStream(void);
-
 @interface SPUCommandLineDriver () <SPUUpdaterDelegate>
 
 @property (nonatomic, readonly) SPUUpdater *updater;
@@ -30,7 +28,7 @@ void _SULogDisableStandardErrorStream(void);
 @synthesize interactive = _interactive;
 @synthesize customFeedURL = _customFeedURL;
 
-- (instancetype)initWithUpdateBundlePath:(NSString *)updateBundlePath applicationBundlePath:(nullable NSString *)applicationBundlePath customFeedURL:(nullable NSString *)customFeedURL updatePermissionResponse:(nullable SPUUpdatePermissionResponse *)updatePermissionResponse deferInstallation:(BOOL)deferInstallation interactiveInstallation:(BOOL)interactiveInstallation verbose:(BOOL)verbose
+- (instancetype)initWithUpdateBundlePath:(NSString *)updateBundlePath applicationBundlePath:(nullable NSString *)applicationBundlePath customFeedURL:(nullable NSString *)customFeedURL updatePermissionResponse:(nullable SUUpdatePermissionResponse *)updatePermissionResponse deferInstallation:(BOOL)deferInstallation interactiveInstallation:(BOOL)interactiveInstallation verbose:(BOOL)verbose
 {
     self = [super init];
     if (self != nil) {
@@ -52,10 +50,6 @@ void _SULogDisableStandardErrorStream(void);
         _verbose = verbose;
         _interactive = interactiveInstallation;
         _customFeedURL = [customFeedURL copy];
-        
-#ifndef DEBUG
-        _SULogDisableStandardErrorStream();
-#endif
         
         id <SPUUserDriver> userDriver = [[SPUCommandLineUserDriver alloc] initWithUpdatePermissionResponse:updatePermissionResponse deferInstallation:deferInstallation verbose:verbose];
         _updater = [[SPUUpdater alloc] initWithHostBundle:updateBundle applicationBundle:applicationBundle userDriver:userDriver delegate:self];

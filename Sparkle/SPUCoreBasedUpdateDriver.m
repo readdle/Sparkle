@@ -14,14 +14,15 @@
 #import "SPUDownloadDriver.h"
 #import "SULog.h"
 #import "SUErrors.h"
+#import "SPUResumableUpdate.h"
 #import "SPUDownloadedUpdate.h"
+#import "SPUInformationalUpdate.h"
 #import "SUAppcastItem.h"
 #import "SULocalizations.h"
 #import "SPUInstallationType.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 @interface SPUCoreBasedUpdateDriver () <SPUBasicUpdateDriverDelegate, SPUDownloadDriverDelegate, SPUInstallerDriverDelegate>
 
@@ -30,7 +31,7 @@
 @property (nonatomic, readonly) SPUInstallerDriver *installerDriver;
 @property (nonatomic, weak, readonly) id<SPUCoreBasedUpdateDriverDelegate> delegate;
 @property (nonatomic) SUAppcastItem *updateItem;
-@property (nonatomic) SPUDownloadedUpdate *downloadedUpdate;
+@property (nonatomic) id<SPUResumableUpdate> resumableUpdate;
 
 @property (nonatomic, readonly) SUHost *host;
 @property (nonatomic) BOOL resumingInstallingUpdate;
@@ -56,7 +57,7 @@
 @synthesize updater = _updater;
 @synthesize updaterDelegate = _updaterDelegate;
 @synthesize userAgent = _userAgent;
-@synthesize downloadedUpdate = _downloadedUpdate;
+@synthesize resumableUpdate = _resumableUpdate;
 
 - (instancetype)initWithHost:(SUHost *)host applicationBundle:(NSBundle *)applicationBundle sparkleBundle:(NSBundle *)sparkleBundle updater:(id)updater updaterDelegate:(nullable id <SPUUpdaterDelegate>)updaterDelegate delegate:(id<SPUCoreBasedUpdateDriverDelegate>)delegate
 {
@@ -106,12 +107,12 @@
     }
 }
 
-- (void)checkForUpdatesAtAppcastURL:(NSURL *)appcastURL withUserAgent:(NSString *)userAgent httpHeaders:(NSDictionary * _Nullable)httpHeaders includesSkippedUpdates:(BOOL)includesSkippedUpdates requiresSilentInstall:(BOOL)silentInstall
+- (void)checkForUpdatesAtAppcastURL:(NSURL *)appcastURL withUserAgent:(NSString *)userAgent httpHeaders:(NSDictionary * _Nullable)httpHeaders inBackground:(BOOL)background includesSkippedUpdates:(BOOL)includesSkippedUpdates requiresSilentInstall:(BOOL)silentInstall
 {
     self.userAgent = userAgent;
     self.silentInstall = silentInstall;
     
-    [self.basicDriver checkForUpdatesAtAppcastURL:appcastURL withUserAgent:userAgent httpHeaders:httpHeaders includesSkippedUpdates:includesSkippedUpdates];
+    [self.basicDriver checkForUpdatesAtAppcastURL:appcastURL withUserAgent:userAgent httpHeaders:httpHeaders inBackground:background includesSkippedUpdates:includesSkippedUpdates];
 }
 
 - (void)resumeInstallingUpdateWithCompletion:(SPUUpdateDriverCompletion)completionBlock
@@ -122,15 +123,15 @@
     [self.basicDriver resumeInstallingUpdateWithCompletion:completionBlock];
 }
 
-- (void)resumeDownloadedUpdate:(SPUDownloadedUpdate *)downloadedUpdate completion:(SPUUpdateDriverCompletion)completionBlock
+- (void)resumeUpdate:(id<SPUResumableUpdate>)resumableUpdate completion:(SPUUpdateDriverCompletion)completionBlock
 {
-    self.downloadedUpdate = downloadedUpdate;
+    self.resumableUpdate = resumableUpdate;
     self.silentInstall = NO;
     
     // Note if installer interaction isn't allowed, we shouldn't have downloaded the update, and shouldn't be able to get here
     // So no need to do a test if we can perform an update without authorization
     
-    [self.basicDriver resumeDownloadedUpdate:downloadedUpdate completion:completionBlock];
+    [self.basicDriver resumeUpdate:resumableUpdate completion:completionBlock];
 }
 
 - (void)basicDriverDidFinishLoadingAppcast
@@ -163,9 +164,9 @@
     }
 }
 
-- (void)downloadUpdateFromAppcastItem:(SUAppcastItem *)updateItem
+- (void)downloadUpdateFromAppcastItem:(SUAppcastItem *)updateItem inBackground:(BOOL)background
 {
-    self.downloadDriver = [[SPUDownloadDriver alloc] initWithUpdateItem:updateItem host:self.host userAgent:self.userAgent delegate:self];
+    self.downloadDriver = [[SPUDownloadDriver alloc] initWithUpdateItem:updateItem host:self.host userAgent:self.userAgent inBackground:background delegate:self];
     
     if ([self.updaterDelegate respondsToSelector:@selector(updater:willDownloadUpdate:withRequest:)]) {
         [self.updaterDelegate updater:self.updater
@@ -183,14 +184,14 @@
     }
 }
 
-- (void)downloadDriverDidReceiveExpectedContentLength:(NSUInteger)expectedContentLength
+- (void)downloadDriverDidReceiveExpectedContentLength:(uint64_t)expectedContentLength
 {
     if ([self.delegate respondsToSelector:@selector(downloadDriverDidReceiveExpectedContentLength:)]) {
         [self.delegate downloadDriverDidReceiveExpectedContentLength:expectedContentLength];
     }
 }
 
-- (void)downloadDriverDidReceiveDataOfLength:(NSUInteger)length
+- (void)downloadDriverDidReceiveDataOfLength:(uint64_t)length
 {
     if ([self.delegate respondsToSelector:@selector(downloadDriverDidReceiveDataOfLength:)]) {
         [self.delegate downloadDriverDidReceiveDataOfLength:length];
@@ -199,19 +200,24 @@
 
 - (void)downloadDriverDidDownloadUpdate:(SPUDownloadedUpdate *)downloadedUpdate
 {
-    self.downloadedUpdate = downloadedUpdate;
+    self.resumableUpdate = downloadedUpdate;
     [self extractUpdate:downloadedUpdate];
+}
+
+- (void)deferInformationalUpdate:(SUAppcastItem *)updateItem
+{
+    self.resumableUpdate = [[SPUInformationalUpdate alloc] initWithAppcastItem:updateItem];
 }
 
 - (void)extractDownloadedUpdate
 {
-    assert(self.downloadedUpdate != nil);
-    [self extractUpdate:self.downloadedUpdate];
+    assert(self.resumableUpdate != nil);
+    [self extractUpdate:self.resumableUpdate];
 }
 
 - (void)clearDownloadedUpdate
 {
-    self.downloadedUpdate = nil;
+    self.resumableUpdate = nil;
 }
 
 - (void)extractUpdate:(SPUDownloadedUpdate *)downloadedUpdate
@@ -329,11 +335,13 @@
     SUAppcastItem *nonDeltaUpdateItem = self.basicDriver.nonDeltaUpdateItem;
     assert(nonDeltaUpdateItem != nil);
     
+    BOOL backgroundDownload = self.downloadDriver.inBackground;
+    
     [self clearDownloadedUpdate];
     
     // Fall back to the non-delta update. Note that we don't want to trigger another update was found event.
     self.updateItem = nonDeltaUpdateItem;
-    [self downloadUpdateFromAppcastItem:nonDeltaUpdateItem];
+    [self downloadUpdateFromAppcastItem:nonDeltaUpdateItem inBackground:backgroundDownload];
 }
 
 - (void)abortUpdateAndShowNextUpdateImmediately:(BOOL)shouldShowUpdateImmediately error:(nullable NSError *)error
@@ -341,8 +349,9 @@
     [self.installerDriver abortInstall];
     [self.downloadDriver cleanup];
     
-    SPUDownloadedUpdate *downloadedUpdate = (error == nil || error.code == SUInstallationAuthorizeLaterError) ? self.downloadedUpdate : nil;
-    [self.basicDriver abortUpdateAndShowNextUpdateImmediately:shouldShowUpdateImmediately downloadedUpdate:downloadedUpdate error:error];
+    id<SPUResumableUpdate> resumableUpdate = (error == nil || error.code == SUInstallationAuthorizeLaterError) ? self.resumableUpdate : nil;
+    
+    [self.basicDriver abortUpdateAndShowNextUpdateImmediately:shouldShowUpdateImmediately resumableUpdate:resumableUpdate error:error];
 }
 
 @end

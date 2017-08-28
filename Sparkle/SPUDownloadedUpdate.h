@@ -2,21 +2,19 @@
 //  SPUDownloadedUpdate.h
 //  Sparkle
 //
-//  Created by Mayur Pawashe on 7/18/16.
-//  Copyright © 2016 Sparkle Project. All rights reserved.
+//  Created by Mayur Pawashe on 1/8/17.
+//  Copyright © 2017 Sparkle Project. All rights reserved.
 //
 
 #import <Foundation/Foundation.h>
+#import "SPUResumableUpdate.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
-@class SUAppcastItem;
-
-@interface SPUDownloadedUpdate : NSObject
+@interface SPUDownloadedUpdate : NSObject <SPUResumableUpdate>
 
 - (instancetype)initWithAppcastItem:(SUAppcastItem *)updateItem downloadName:(NSString *)downloadName temporaryDirectory:(NSString *)temporaryDirectory;
 
-@property (nonatomic, readonly) SUAppcastItem *updateItem;
 @property (nonatomic, copy, readonly) NSString *downloadName;
 @property (nonatomic, copy, readonly) NSString *temporaryDirectory;
 

@@ -16,11 +16,10 @@
 #import "SUAppcastItem.h"
 #import "SPUProbeInstallStatus.h"
 #import "SPUInstallationInfo.h"
-#import "SPUDownloadedUpdate.h"
+#import "SPUResumableUpdate.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 @interface SPUBasicUpdateDriver () <SUAppcastDriverDelegate>
 
@@ -65,13 +64,13 @@
     self.completionBlock = completionBlock;
 }
 
-- (void)checkForUpdatesAtAppcastURL:(NSURL *)appcastURL withUserAgent:(NSString *)userAgent httpHeaders:(NSDictionary * _Nullable)httpHeaders includesSkippedUpdates:(BOOL)includesSkippedUpdates
+- (void)checkForUpdatesAtAppcastURL:(NSURL *)appcastURL withUserAgent:(NSString *)userAgent httpHeaders:(NSDictionary * _Nullable)httpHeaders inBackground:(BOOL)background includesSkippedUpdates:(BOOL)includesSkippedUpdates
 {
     if ([self.host isRunningOnReadOnlyVolume])
     {
         [self.delegate basicDriverIsRequestingAbortUpdateWithError:[NSError errorWithDomain:SUSparkleErrorDomain code:SURunningFromDiskImageError userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:SULocalizedString(@"%1$@ can't be updated when it's running from a read-only volume like a disk image or an optical drive. Move %1$@ to your Applications folder, relaunch it from there, and try again.", nil), [self.host name]] }]];
     } else {
-        [self.appcastDriver loadAppcastFromURL:appcastURL userAgent:userAgent httpHeaders:httpHeaders includesSkippedUpdates:includesSkippedUpdates];
+        [self.appcastDriver loadAppcastFromURL:appcastURL userAgent:userAgent httpHeaders:httpHeaders inBackground:background includesSkippedUpdates:includesSkippedUpdates];
     }
 }
 
@@ -101,11 +100,11 @@
     }];
 }
 
-- (void)resumeDownloadedUpdate:(SPUDownloadedUpdate *)downloadedUpdate completion:(SPUUpdateDriverCompletion)completionBlock
+- (void)resumeUpdate:(id<SPUResumableUpdate>)resumableUpdate completion:(SPUUpdateDriverCompletion)completionBlock
 {
     self.completionBlock = completionBlock;
     
-    [self notifyResumableUpdateItem:downloadedUpdate.updateItem];
+    [self notifyResumableUpdateItem:resumableUpdate.updateItem];
 }
 
 - (SUAppcastItem *)nonDeltaUpdateItem
@@ -173,7 +172,7 @@
     }
 }
 
-- (void)abortUpdateAndShowNextUpdateImmediately:(BOOL)shouldShowUpdateImmediately downloadedUpdate:(SPUDownloadedUpdate * _Nullable)downloadedUpdate error:(nullable NSError *)error
+- (void)abortUpdateAndShowNextUpdateImmediately:(BOOL)shouldShowUpdateImmediately resumableUpdate:(id<SPUResumableUpdate> _Nullable)resumableUpdate error:(nullable NSError *)error
 {
     self.aborted = YES;
     
@@ -182,7 +181,7 @@
             NSError *errorToDisplay = error;
             int finiteRecursion=5;
             do {
-                SULog(@"Error: %@ %@ (URL %@)", errorToDisplay.localizedDescription, errorToDisplay.localizedFailureReason, errorToDisplay.userInfo[NSURLErrorFailingURLErrorKey]);
+                SULog(SULogLevelError, @"Error: %@ %@ (URL %@)", errorToDisplay.localizedDescription, errorToDisplay.localizedFailureReason, errorToDisplay.userInfo[NSURLErrorFailingURLErrorKey]);
                 errorToDisplay = errorToDisplay.userInfo[NSUnderlyingErrorKey];
             } while(--finiteRecursion && errorToDisplay);
         }
@@ -194,7 +193,7 @@
     }
     
     if (self.completionBlock != nil) {
-        self.completionBlock(shouldShowUpdateImmediately, downloadedUpdate);
+        self.completionBlock(shouldShowUpdateImmediately, resumableUpdate);
         self.completionBlock = nil;
     }
 }

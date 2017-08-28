@@ -20,9 +20,8 @@
 #import "SPUDownloadedUpdate.h"
 #import "SPUDownloadData.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 @interface SPUDownloadDriver () <SPUDownloaderDelegate>
 
@@ -34,8 +33,7 @@
 @property (nonatomic, copy) NSString *downloadName;
 @property (nonatomic, weak) id<SPUDownloadDriverDelegate> delegate;
 @property (nonatomic) BOOL retrievedDownloadResult;
-@property (nonatomic) BOOL retrievedDownloadResponse;
-@property (nonatomic) NSUInteger expectedContentLength;
+@property (nonatomic) uint64_t expectedContentLength;
 @property (nonatomic) BOOL cleaningUp;
 
 @end
@@ -46,16 +44,16 @@
 @synthesize connection = _connection;
 @synthesize updateItem = _updateItem;
 @synthesize request = _request;
+@synthesize inBackground = _inBackground;
 @synthesize host = _host;
 @synthesize temporaryDirectory = _temporaryDirectory;
 @synthesize downloadName = _downloadName;
 @synthesize delegate = _delegate;
 @synthesize retrievedDownloadResult = _retrievedDownloadResult;
-@synthesize retrievedDownloadResponse = _retrievedDownloadResponse;
 @synthesize expectedContentLength = _expectedContentLength;
 @synthesize cleaningUp = _cleaningUp;
 
-- (instancetype)initWithUpdateItem:(SUAppcastItem *)updateItem host:(SUHost *)host userAgent:(NSString *)userAgent delegate:(id<SPUDownloadDriverDelegate>)delegate
+- (instancetype)initWithUpdateItem:(SUAppcastItem *)updateItem host:(SUHost *)host userAgent:(NSString *)userAgent inBackground:(BOOL)background delegate:(id<SPUDownloadDriverDelegate>)delegate
 {
     self = [super init];
     if (self != nil) {
@@ -63,8 +61,10 @@
         _host = host;
         _delegate = delegate;
         
+        _inBackground = background;
         _request = [NSMutableURLRequest requestWithURL:updateItem.fileURL];
         [_request setValue:userAgent forHTTPHeaderField:@"User-Agent"];
+        _request.networkServiceType = background ? NSURLNetworkServiceTypeBackground : NSURLNetworkServiceTypeDefault;
         
         if (!SPUXPCServiceExists(@DOWNLOADER_BUNDLE_ID)) {
             _downloader = [[SPUDownloader alloc] initWithDelegate:self];
@@ -100,7 +100,7 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             SPUDownloadDriver *strongSelf = weakSelf;
             if (strongSelf != nil && !strongSelf.retrievedDownloadResult && !strongSelf.cleaningUp) {
-                SULog(@"Connection to update downloader was invalidated");
+                SULog(SULogLevelError, @"Connection to update downloader was invalidated");
                 
                 NSDictionary *userInfo =
                 @{
@@ -140,7 +140,7 @@
         self.retrievedDownloadResult = YES;
         
         if (self.expectedContentLength > 0 && self.updateItem.contentLength > 0 && self.expectedContentLength != self.updateItem.contentLength) {
-            SULog(@"Warning: Downloader's expected content length (%lu) != Appcast item's length (%lu)", self.expectedContentLength, self.updateItem.contentLength);
+            SULog(SULogLevelError, @"Warning: Downloader's expected content length (%llu) != Appcast item's length (%llu)", self.expectedContentLength, self.updateItem.contentLength);
         }
         
         SPUDownloadedUpdate *downloadedUpdate = [[SPUDownloadedUpdate alloc] initWithAppcastItem:self.updateItem downloadName:self.downloadName temporaryDirectory:self.temporaryDirectory];
@@ -186,21 +186,18 @@
 - (void)downloaderDidReceiveExpectedContentLength:(int64_t)expectedContentLength
 {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // We only notify the expected content length once and we try to use the content length from the appcast instead of from the downloader,
-        // so that we have an expected length for the entire download rather than a single piece of block
-        if (!self.retrievedDownloadResponse) {
-            [self.delegate downloadDriverDidReceiveExpectedContentLength:(self.updateItem.contentLength > 0 ? self.updateItem.contentLength : (NSUInteger)expectedContentLength)];
-            self.retrievedDownloadResponse = YES;
-        }
+        // Fallback to appcast item's content length if we don't get the length from HTTP header
+        [self.delegate downloadDriverDidReceiveExpectedContentLength:expectedContentLength > 0 ? (uint64_t)expectedContentLength : self.updateItem.contentLength];
         
-        // Accumulate expected content length from downloader so we can later verify if the total length matches with the content length from the appcast
-        if (expectedContentLength > 0 && expectedContentLength != NSURLResponseUnknownLength) {
-            self.expectedContentLength += (NSUInteger)expectedContentLength;
+        // Reset expected content length from downloader
+        // Later we verify if the total length matches with the content length from the appcast
+        if (expectedContentLength > 0) {
+            self.expectedContentLength = (uint64_t)expectedContentLength;
         }
     });
 }
 
-- (void)downloaderDidReceiveDataOfLength:(NSUInteger)length
+- (void)downloaderDidReceiveDataOfLength:(uint64_t)length
 {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.delegate downloadDriverDidReceiveDataOfLength:length];

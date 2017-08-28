@@ -16,9 +16,8 @@
 #import "SUHost.h"
 #import "SUConstants.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 @interface SUAppcastDriver ()
 
@@ -52,14 +51,14 @@
     return self;
 }
 
-- (void)loadAppcastFromURL:(NSURL *)appcastURL userAgent:(NSString *)userAgent httpHeaders:(NSDictionary * _Nullable)httpHeaders includesSkippedUpdates:(BOOL)includesSkippedUpdates
+- (void)loadAppcastFromURL:(NSURL *)appcastURL userAgent:(NSString *)userAgent httpHeaders:(NSDictionary * _Nullable)httpHeaders inBackground:(BOOL)background includesSkippedUpdates:(BOOL)includesSkippedUpdates
 {
     self.userAgent = userAgent;
     
     SUAppcast *appcast = [[SUAppcast alloc] init];
     [appcast setUserAgentString:userAgent];
     [appcast setHttpHeaders:httpHeaders];
-    [appcast fetchAppcastFromURL:appcastURL completionBlock:^(NSError *error) {
+    [appcast fetchAppcastFromURL:appcastURL inBackground:background completionBlock:^(NSError *error) {
         if (error != nil) {
             [self.delegate didFailToFetchAppcastWithError:error];
         } else {

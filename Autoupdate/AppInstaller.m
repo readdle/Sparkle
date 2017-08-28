@@ -28,9 +28,8 @@
 #import "SPUInstallationType.h"
 #import "SPULocalCacheDirectory.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "daemon-safe" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 #define FIRST_UPDATER_MESSAGE_TIMEOUT 7ull
 #define RETRIEVE_PROCESS_IDENTIFIER_TIMEOUT 5ull
@@ -65,7 +64,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
 @property (nonatomic, assign) BOOL shouldRelaunch;
 @property (nonatomic, assign) BOOL shouldShowUI;
 
-@property (nonatomic) id<SPUInstallerProtocol> installer;
+@property (nonatomic) id<SUInstallerProtocol> installer;
 @property (nonatomic) BOOL willCompleteInstallation;
 @property (nonatomic) BOOL receivedInstallationData;
 @property (nonatomic) BOOL finishedValidation;
@@ -126,7 +125,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
 - (BOOL)listener:(NSXPCListener *)__unused listener shouldAcceptNewConnection:(NSXPCConnection *)newConnection
 {
     if (self.activeConnection != nil) {
-        SULog(@"Rejecting multiple connections...");
+        SULog(SULogLevelDefault, @"Rejecting multiple connections...");
         [newConnection invalidate];
         return NO;
     }
@@ -148,7 +147,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
             AppInstaller *strongSelf = weakSelf;
             if (strongSelf != nil) {
                 if (strongSelf.activeConnection != nil && !strongSelf.willCompleteInstallation) {
-                    SULog(@"Invalidation on remote port being called, and installation is not close enough to completion!");
+                    SULog(SULogLevelError, @"Invalidation on remote port being called, and installation is not close enough to completion!");
                     [strongSelf cleanupAndExitWithStatus:EXIT_FAILURE];
                 }
                 strongSelf.communicator = nil;
@@ -171,12 +170,12 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(FIRST_UPDATER_MESSAGE_TIMEOUT * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (!self.receivedInstallationData) {
-            SULog(@"Timeout: installation data was never received");
+            SULog(SULogLevelError, @"Timeout: installation data was never received");
             [self cleanupAndExitWithStatus:EXIT_FAILURE];
         }
         
         if (!self.agentConnection.connected) {
-            SULog(@"Timeout: agent connection was never initiated");
+            SULog(SULogLevelError, @"Timeout: agent connection was never initiated");
             [self cleanupAndExitWithStatus:EXIT_FAILURE];
         }
     });
@@ -187,11 +186,11 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     [self.communicator handleMessageWithIdentifier:SPUExtractionStarted data:[NSData data]];
     
     NSString *archivePath = [self.updateDirectoryPath stringByAppendingPathComponent:self.downloadName];
-    id<SUUnarchiverProtocol> unarchiver = [SUUnarchiver unarchiverForPath:archivePath updatingHostBundlePath:self.host.bundlePath decryptionPassword:self.decryptionPassword delegate:self];
+    id<SUUnarchiverProtocol> unarchiver = [SUUnarchiver unarchiverForPath:archivePath updatingHostBundlePath:self.host.bundlePath decryptionPassword:self.decryptionPassword];
     
     BOOL success;
     if (!unarchiver) {
-        SULog(@"Error: No valid unarchiver for %@", archivePath);
+        SULog(SULogLevelError, @"Error: No valid unarchiver for %@", archivePath);
         
         success = NO;
     } else {
@@ -207,17 +206,36 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     if (!success) {
         [self unarchiverDidFail];
     } else {
-        [unarchiver start];
-    }
-}
-
-- (void)unarchiverExtractedProgress:(double)progress
-{
-    if (sizeof(progress) == sizeof(uint64_t)) {
-        uint64_t progressValue = CFSwapInt64HostToLittle(*(uint64_t *)&progress);
-        NSData *data = [NSData dataWithBytes:&progressValue length:sizeof(progressValue)];
-        
-        [self.communicator handleMessageWithIdentifier:SPUExtractedArchiveWithProgress data:data];
+        [unarchiver
+         unarchiveWithCompletionBlock:^(NSError * _Nullable error) {
+             if (error != nil) {
+                 [self unarchiverDidFail];
+             } else {
+                 [self.communicator handleMessageWithIdentifier:SPUValidationStarted data:[NSData data]];
+                 
+                 BOOL validationSuccess = [self.updateValidator validateWithUpdateDirectory:self.updateDirectoryPath];
+                 
+                 if (!validationSuccess) {
+                     SULog(SULogLevelError, @"Error: update validation was a failure");
+                     [self cleanupAndExitWithStatus:EXIT_FAILURE];
+                 } else {
+                     [self.communicator handleMessageWithIdentifier:SPUInstallationStartedStage1 data:[NSData data]];
+                     
+                     self.finishedValidation = YES;
+                     if (self.agentInitiatedConnection) {
+                         [self retrieveProcessIdentifierAndStartInstallation];
+                     }
+                 }
+             }
+         }
+         progressBlock:^(double progress) {
+             if (sizeof(progress) == sizeof(uint64_t)) {
+                 uint64_t progressValue = CFSwapInt64HostToLittle(*(uint64_t *)&progress);
+                 NSData *data = [NSData dataWithBytes:&progressValue length:sizeof(progressValue)];
+                 
+                 [self.communicator handleMessageWithIdentifier:SPUExtractedArchiveWithProgress data:data];
+             }
+         }];
     }
 }
 
@@ -240,25 +258,6 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     [self.communicator handleMessageWithIdentifier:SPUArchiveExtractionFailed data:[NSData data]];
 }
 
-- (void)unarchiverDidFinish
-{
-    [self.communicator handleMessageWithIdentifier:SPUValidationStarted data:[NSData data]];
-    
-    BOOL validationSuccess = [self.updateValidator validateWithUpdateDirectory:self.updateDirectoryPath];
-    
-    if (!validationSuccess) {
-        SULog(@"Error: update validation was a failure");
-        [self cleanupAndExitWithStatus:EXIT_FAILURE];
-    } else {
-        [self.communicator handleMessageWithIdentifier:SPUInstallationStartedStage1 data:[NSData data]];
-        
-        self.finishedValidation = YES;
-        if (self.agentInitiatedConnection) {
-            [self retrieveProcessIdentifierAndStartInstallation];
-        }
-    }
-}
-
 - (void)agentConnectionDidInitiate
 {
     self.agentInitiatedConnection = YES;
@@ -270,7 +269,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
 - (void)agentConnectionDidInvalidate
 {
     if (!self.finishedValidation || !self.agentInitiatedConnection) {
-        SULog(@"Error: Agent connection invalidated before installation began");
+        SULog(SULogLevelError, @"Error: Agent connection invalidated before installation began");
         [self cleanupAndExitWithStatus:EXIT_FAILURE];
     }
 }
@@ -290,7 +289,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(RETRIEVE_PROCESS_IDENTIFIER_TIMEOUT * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (self.terminationListener == nil) {
-            SULog(@"Timeour error: failed to retreive process identifier from agent");
+            SULog(SULogLevelError, @"Timeout error: failed to retreive process identifier from agent");
             [self cleanupAndExitWithStatus:EXIT_FAILURE];
         }
     });
@@ -306,14 +305,14 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
             
             SPUInstallationInputData *installationData = (SPUInstallationInputData *)SPUUnarchiveRootObjectSecurely(data, [SPUInstallationInputData class]);
             if (installationData == nil) {
-                SULog(@"Error: Failed to unarchive input installation data");
+                SULog(SULogLevelError, @"Error: Failed to unarchive input installation data");
                 [self cleanupAndExitWithStatus:EXIT_FAILURE];
                 return;
             }
             
             NSString *installationType = installationData.installationType;
             if (!SPUValidInstallationType(installationType)) {
-                SULog(@"Error: Received invalid installation type: %@", installationType);
+                SULog(SULogLevelError, @"Error: Received invalid installation type: %@", installationType);
                 [self cleanupAndExitWithStatus:EXIT_FAILURE];
                 return;
             }
@@ -322,14 +321,14 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
             
             NSString *bundleIdentifier = hostBundle.bundleIdentifier;
             if (bundleIdentifier == nil || ![bundleIdentifier isEqualToString:self.hostBundleIdentifier]) {
-                SULog(@"Error: Failed to match host bundle identifiers %@ and %@", self.hostBundleIdentifier, bundleIdentifier);
+                SULog(SULogLevelError, @"Error: Failed to match host bundle identifiers %@ and %@", self.hostBundleIdentifier, bundleIdentifier);
                 [self cleanupAndExitWithStatus:EXIT_FAILURE];
                 return;
             }
             
             // This will be important later
             if (installationData.relaunchPath == nil) {
-                SULog(@"Error: Failed to obtain relaunch path from installation data");
+                SULog(SULogLevelError, @"Error: Failed to obtain relaunch path from installation data");
                 [self cleanupAndExitWithStatus:EXIT_FAILURE];
                 return;
             }
@@ -341,7 +340,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
             
             NSString *cacheInstallationPath = [SPULocalCacheDirectory createUniqueDirectoryInDirectory:rootCacheInstallationPath];
             if (cacheInstallationPath == nil) {
-                SULog(@"Error: Failed to create installation cache directory in %@", rootCacheInstallationPath);
+                SULog(SULogLevelError, @"Error: Failed to create installation cache directory in %@", rootCacheInstallationPath);
                 [self cleanupAndExitWithStatus:EXIT_FAILURE];
                 return;
             }
@@ -355,7 +354,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
             
             NSError *moveError = nil;
             if (![[[SUFileManager alloc] init] moveItemAtURL:downloadURL toURL:downloadDestinationURL error:&moveError]) {
-                SULog(@"Error: Failed to move download archive to new location: %@", moveError);
+                SULog(SULogLevelError, @"Error: Failed to move download archive to new location: %@", moveError);
                 [self cleanupAndExitWithStatus:EXIT_FAILURE];
                 return;
             }
@@ -364,7 +363,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
             NSError *attributesError = nil;
             NSString *downloadDestinationPath = downloadDestinationURL.path;
             if (downloadDestinationPath == nil) {
-                SULog(@"Error: Failed to retrieve download archive path from %@", downloadDestinationURL);
+                SULog(SULogLevelError, @"Error: Failed to retrieve download archive path from %@", downloadDestinationURL);
                 [self cleanupAndExitWithStatus:EXIT_FAILURE];
                 return;
             }
@@ -372,13 +371,13 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
             NSDictionary<NSString *, id> *archiveAttributes = [[NSFileManager defaultManager] attributesOfItemAtPath:downloadDestinationPath error:&attributesError];
             
             if (archiveAttributes == nil) {
-                SULog(@"Error: Failed to retrieve download archive attributes from %@", downloadDestinationPath);
+                SULog(SULogLevelError, @"Error: Failed to retrieve download archive attributes from %@", downloadDestinationPath);
                 [self cleanupAndExitWithStatus:EXIT_FAILURE];
                 return;
             }
             
             if (![archiveAttributes[NSFileType] isEqualToString:NSFileTypeRegular]) {
-                SULog(@"Error: Received bad archive file type: %@", archiveAttributes[NSFileType]);
+                SULog(SULogLevelError, @"Error: Received bad archive file type: %@", archiveAttributes[NSFileType]);
                 [self cleanupAndExitWithStatus:EXIT_FAILURE];
                 return;
             }
@@ -435,10 +434,10 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     
     dispatch_async(self.installerQueue, ^{
         NSError *installerError = nil;
-        id <SPUInstallerProtocol> installer = [SUInstaller installerForHost:self.host expectedInstallationType:self.installationType updateDirectory:self.updateDirectoryPath versionComparator:[[SUStandardVersionComparator alloc] init] error:&installerError];
+        id <SUInstallerProtocol> installer = [SUInstaller installerForHost:self.host expectedInstallationType:self.installationType updateDirectory:self.updateDirectoryPath error:&installerError];
         
         if (installer == nil) {
-            SULog(@"Error: Failed to create installer instance with error: %@", installerError);
+            SULog(SULogLevelError, @"Error: Failed to create installer instance with error: %@", installerError);
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self cleanupAndExitWithStatus:EXIT_FAILURE];
             });
@@ -447,8 +446,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
         
         NSError *firstStageError = nil;
         if (![installer performInitialInstallation:&firstStageError]) {
-            SULog(@"Error: Failed to start installer with error: %@", firstStageError);
-            [self.installer cleanup];
+            SULog(SULogLevelError, @"Error: Failed to start installer with error: %@", firstStageError);
             self.installer = nil;
             
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -500,8 +498,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
             [self.agentConnection.agent sendTerminationSignal];
         });
     } else {
-        SULog(@"Error: Failed to resume installer on stage 2 because installation cannot be installed silently");
-        [self.installer cleanup];
+        SULog(SULogLevelError, @"Error: Failed to resume installer on stage 2 because installation cannot be installed silently");
         self.installer = nil;
         
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -514,7 +511,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
 {
     [self.terminationListener startListeningWithCompletion:^(BOOL success) {
         if (!success) {
-            SULog(@"Failed to listen for application termination");
+            SULog(SULogLevelError, @"Failed to listen for application termination");
             [self cleanupAndExitWithStatus:EXIT_FAILURE];
             return;
         }
@@ -554,9 +551,8 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
             
             NSError *thirdStageError = nil;
             if (![self.installer performFinalInstallation:&thirdStageError]) {
-                SULog(@"Failed to finalize installation with error: %@", thirdStageError);
+                SULog(SULogLevelError, @"Failed to finalize installation with error: %@", thirdStageError);
                 
-                [self.installer cleanup];
                 self.installer = nil;
                 
                 dispatch_async(dispatch_get_main_queue(), ^{
@@ -590,13 +586,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
                     [self.agentConnection.agent relaunchPath:pathToRelaunch];
                 }
                 
-                dispatch_async(self.installerQueue, ^{
-                    [self.installer cleanup];
-                    
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        [self cleanupAndExitWithStatus:EXIT_SUCCESS];
-                    });
-                });
+                [self cleanupAndExitWithStatus:EXIT_SUCCESS];
             });
         });
     }];
@@ -618,7 +608,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
     if (self.updateDirectoryPath != nil) {
         NSError *theError = nil;
         if (![[[SUFileManager alloc] init] removeItemAtURL:[NSURL fileURLWithPath:self.updateDirectoryPath] error:&theError]) {
-            SULog(@"Couldn't remove update folder: %@.", theError);
+            SULog(SULogLevelError, @"Couldn't remove update folder: %@.", theError);
         }
     }
     

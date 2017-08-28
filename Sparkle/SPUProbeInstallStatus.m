@@ -15,9 +15,8 @@
 #import "SUXPCInstallerStatus.h"
 #import "SULog.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
+
+#include "AppKitPrevention.h"
 
 // This timeout is if probing the installer takes too long
 // It should be at least more than 1 second since a probe can take around that much time
@@ -60,7 +59,7 @@
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(PROBE_TIMEOUT * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (!handledCompletion) {
-            SULog(@"Timed out while probing installer progress");
+            SULog(SULogLevelError, @"Timed out while probing installer progress");
             completionHandler(NO);
             handledCompletion = YES;
         }
@@ -109,7 +108,7 @@
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(PROBE_TIMEOUT * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (!handledCompletion) {
-            SULog(@"Timed out while probing installer info data");
+            SULog(SULogLevelDefault, @"Timed out while probing installer info data");
             completionHandler(nil);
             handledCompletion = YES;
         }

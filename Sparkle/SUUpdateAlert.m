@@ -20,8 +20,13 @@
 #import "SULocalizations.h"
 #import "SUAppcastItem.h"
 #import "SPUDownloadData.h"
-#import "SPUApplicationInfo.h"
+#import "SUApplicationInfo.h"
 #import "SPUUpdaterSettings.h"
+#import "SUSystemUpdateInfo.h"
+#import "SUTouchBarForwardDeclarations.h"
+#import "SUTouchBarButtonGroup.h"
+
+static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDENTIFIER ".SUUpdateAlert";
 
 // WebKit protocols are not explicitly declared until 10.11 SDK, so
 // declare dummy protocols to keep the build working on earlier SDKs.
@@ -32,7 +37,7 @@
 @end
 #endif
 
-@interface SUUpdateAlert () <WebFrameLoadDelegate, WebPolicyDelegate>
+@interface SUUpdateAlert () <WebFrameLoadDelegate, WebPolicyDelegate, NSTouchBarDelegate>
 
 @property (strong) SUAppcastItem *updateItem;
 @property (nonatomic) BOOL alreadyDownloaded;
@@ -40,6 +45,7 @@
 @property (nonatomic) BOOL allowsAutomaticUpdates;
 @property (nonatomic, copy, nullable) void(^completionBlock)(SPUUpdateAlertChoice);
 @property (nonatomic, copy, nullable) void(^resumableCompletionBlock)(SPUInstallUpdateStatus);
+@property (nonatomic, copy, nullable) void(^informationalCompletionBlock)(SPUInformationalUpdateAlertChoice);
 
 @property (strong) NSProgressIndicator *releaseNotesSpinner;
 @property (assign) BOOL webViewFinishedLoading;
@@ -59,6 +65,7 @@
 @synthesize completionBlock = _completionBlock;
 @synthesize alreadyDownloaded = _alreadyDownloaded;
 @synthesize resumableCompletionBlock = _resumableCompletionBlock;
+@synthesize informationalCompletionBlock = _informationalCompletionBlock;
 @synthesize versionDisplayer;
 
 @synthesize updateItem;
@@ -85,7 +92,7 @@
         versionDisplayer = aVersionDisplayer;
         
         SPUUpdaterSettings *updaterSettings = [[SPUUpdaterSettings alloc] initWithHostBundle:host.bundle];
-        _allowsAutomaticUpdates = updaterSettings.allowsAutomaticUpdates;
+        _allowsAutomaticUpdates = updaterSettings.allowsAutomaticUpdates && !item.isInformationOnlyUpdate;
         [self setShouldCascadeWindows:NO];
         
         // Alex: This dummy line makes sure that the binary is linked against WebKit.
@@ -118,6 +125,16 @@
     return self;
 }
 
+- (instancetype)initWithAppcastItem:(SUAppcastItem *)item host:(SUHost *)aHost versionDisplayer:(id <SUVersionDisplay>)aVersionDisplayer informationalCompletionBlock:(void (^)(SPUInformationalUpdateAlertChoice))block
+{
+    self = [self initWithAppcastItem:item host:aHost versionDisplayer:aVersionDisplayer];
+    if (self != nil)
+    {
+        _informationalCompletionBlock = [block copy];
+    }
+    return self;
+}
+
 - (NSString *)description { return [NSString stringWithFormat:@"%@ <%@>", [self class], [self.host bundlePath]]; }
 
 
@@ -144,6 +161,17 @@
                 abort();
         }
         self.resumableCompletionBlock = nil;
+    } else if (self.informationalCompletionBlock != nil) {
+        switch (choice) {
+            case SPUInstallLaterChoice:
+                self.informationalCompletionBlock(SPUDismissInformationalNoticeChoice);
+                break;
+            case SPUSkipThisVersionChoice:
+                self.informationalCompletionBlock(SPUSkipThisInformationalVersionChoice);
+                break;
+            case SPUInstallUpdateChoice:
+                abort();
+        }
     }
 }
 
@@ -245,7 +273,7 @@
 
     [self.window setFrameAutosaveName: showReleaseNotes ? @"SUUpdateAlert" : @"SUUpdateAlertSmall" ];
 
-    if ([SPUApplicationInfo isBackgroundApplication:NSApp]) {
+    if ([SUApplicationInfo isBackgroundApplication:[NSApplication sharedApplication]]) {
         [self.window setLevel:NSFloatingWindowLevel]; // This means the window will float over all other apps, if our app is switched out ?!
     }
 
@@ -288,6 +316,10 @@
         self.laterButton.title = SULocalizedString(@"Install on Quit", nil);
     }
 
+    if ([self.updateItem isCriticalUpdate]) {
+        self.skipButton.enabled = NO;
+    }
+
     [self.window center];
 }
 
@@ -299,7 +331,7 @@
 
 - (NSImage *)applicationIcon
 {
-    return [SPUApplicationInfo bestIconForBundle:self.host.bundle];
+    return [SUApplicationInfo bestIconForHost:self.host];
 }
 
 - (NSString *)titleText
@@ -308,9 +340,13 @@
     {
         return [NSString stringWithFormat:SULocalizedString(@"An important update to %@ is ready to install", nil), [self.host name]];
     }
-    else
+    else if (self.alreadyDownloaded)
     {
         return [NSString stringWithFormat:SULocalizedString(@"A new version of %@ is ready to install!", nil), [self.host name]];
+    }
+    else
+    {
+        return [NSString stringWithFormat:SULocalizedString(@"A new version of %@ is available!", nil), [self.host name]];
     }
 }
 
@@ -364,7 +400,7 @@
 
     // Do not allow redirects to dangerous protocols such as file://
     if (!whitelistedSafe) {
-        SULog(@"Blocked display of %@ URL which may be dangerous", scheme);
+        SULog(SULogLevelDefault, @"Blocked display of %@ URL which may be dangerous", scheme);
         [listener ignore];
         return;
     }
@@ -409,6 +445,25 @@
     }
 
     return webViewMenuItems;
+}
+
+- (NSTouchBar *)makeTouchBar
+{
+    NSTouchBar *touchBar = [[NSClassFromString(@"NSTouchBar") alloc] init];
+    touchBar.defaultItemIdentifiers = @[SUUpdateAlertTouchBarIndentifier,];
+    touchBar.principalItemIdentifier = SUUpdateAlertTouchBarIndentifier;
+    touchBar.delegate = self;
+    return touchBar;
+}
+
+- (NSTouchBarItem *)touchBar:(NSTouchBar * __unused)touchBar makeItemForIdentifier:(NSTouchBarItemIdentifier)identifier
+{
+    if ([identifier isEqualToString:SUUpdateAlertTouchBarIndentifier]) {
+        NSCustomTouchBarItem* item = [(NSCustomTouchBarItem *)[NSClassFromString(@"NSCustomTouchBarItem") alloc] initWithIdentifier:identifier];
+        item.viewController = [[SUTouchBarButtonGroup alloc] initByReferencingButtons:@[self.installButton, self.laterButton, self.skipButton]];
+        return item;
+    }
+    return nil;
 }
 
 @end

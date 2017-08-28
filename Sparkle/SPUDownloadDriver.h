@@ -16,9 +16,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)downloadDriverWillBeginDownload;
 
-- (void)downloadDriverDidReceiveExpectedContentLength:(NSUInteger)expectedContentLength;
+- (void)downloadDriverDidReceiveExpectedContentLength:(uint64_t)expectedContentLength;
 
-- (void)downloadDriverDidReceiveDataOfLength:(NSUInteger)length;
+- (void)downloadDriverDidReceiveDataOfLength:(uint64_t)length;
 
 - (void)downloadDriverDidDownloadUpdate:(SPUDownloadedUpdate *)downloadedUpdate;
 
@@ -28,11 +28,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface SPUDownloadDriver : NSObject
 
-- (instancetype)initWithUpdateItem:(SUAppcastItem *)updateItem host:(SUHost *)host userAgent:(NSString *)userAgent delegate:(id<SPUDownloadDriverDelegate>)delegate;
+- (instancetype)initWithUpdateItem:(SUAppcastItem *)updateItem host:(SUHost *)host userAgent:(NSString *)userAgent inBackground:(BOOL)background delegate:(id<SPUDownloadDriverDelegate>)delegate;
 
 - (void)downloadUpdate;
 
 @property (nonatomic, readonly) NSMutableURLRequest *request;
+@property (nonatomic, readonly) BOOL inBackground;
 
 - (void)cleanup;
 

@@ -7,49 +7,46 @@
 
 #import "SUHost.h"
 
-// This is a "core" class and thus should NOT import Cocoa/AppKit
-
 #import "SUConstants.h"
 #include <sys/mount.h> // For statfs for isRunningOnReadOnlyVolume
 #import "SULog.h"
-#import "SUParameterAssert.h"
 
-#ifdef _APPKITDEFINES_H
-#error This is a "core" class and should NOT import AppKit
-#endif
 
-// This class should also be process independent
+#include "AppKitPrevention.h"
+
+// This class should not rely on AppKit and should also be process independent
 // For example, it should not have code that tests writabilty to somewhere on disk,
 // as that may depend on the privileges of the process owner. Or code that depends on
-// if the process is sandboxed or not; eg: finding user caches directory
+// if the process is sandboxed or not; eg: finding the user's caches directory. Or code that depends
+// on compilation flags and if other files exist relative to the host bundle.
 
 @interface SUHost ()
 
 @property (strong, readwrite) NSBundle *bundle;
+@property (nonatomic, readonly) BOOL isMainBundle;
 @property (copy) NSString *defaultsDomain;
 @property (assign) BOOL usesStandardUserDefaults;
-@property (nonatomic) NSDictionary *infoDictionary;
 
 @end
 
 @implementation SUHost
 
 @synthesize bundle;
+@synthesize isMainBundle = _isMainBundle;
 @synthesize defaultsDomain;
 @synthesize usesStandardUserDefaults;
-@synthesize infoDictionary = _infoDictionary;
 
 - (instancetype)initWithBundle:(NSBundle *)aBundle
 {
 	if ((self = [super init]))
 	{
-        SUParameterAssert(aBundle);
+        NSParameterAssert(aBundle);
         self.bundle = aBundle;
         if (![self.bundle bundleIdentifier]) {
-            SULog(@"Error: the bundle being updated at %@ has no %@! This will cause preference read/write to not work properly.", self.bundle, kCFBundleIdentifierKey);
+            SULog(SULogLevelError, @"Error: the bundle being updated at %@ has no %@! This will cause preference read/write to not work properly.", self.bundle, kCFBundleIdentifierKey);
         }
         
-        _infoDictionary = aBundle.infoDictionary;
+        _isMainBundle = [aBundle isEqualTo:[NSBundle mainBundle]];
 
         self.defaultsDomain = [self objectForInfoDictionaryKey:SUDefaultsDomainKey];
         if (!self.defaultsDomain) {
@@ -61,14 +58,6 @@
         usesStandardUserDefaults = !self.defaultsDomain || [self.defaultsDomain isEqualToString:mainBundleIdentifier];
     }
     return self;
-}
-
-// NSBundles always cache the info dictionary, even if you create a new NSBundle instance, but we sometimes want to reload it
-// in case the bundle changes or is updated
-- (void)reloadInfoDictionary
-{
-    CFDictionaryRef infoDictionary = CFBundleCopyInfoDictionaryInDirectory((CFURLRef)self.bundle.bundleURL);
-    self.infoDictionary = CFBridgingRelease(infoDictionary);
 }
 
 - (NSString *)description { return [NSString stringWithFormat:@"%@ <%@>", [self class], [self bundlePath]]; }
@@ -115,7 +104,7 @@
 {
     NSString *version = [self _version];
     if (version == nil) {
-        SULog(@"This host (%@) has no %@! This attribute is required.", [self bundlePath], (__bridge NSString *)kCFBundleVersionKey);
+        SULog(SULogLevelError, @"This host (%@) has no %@! This attribute is required.", [self bundlePath], (__bridge NSString *)kCFBundleVersionKey);
         abort();
     }
     return version;
@@ -165,7 +154,21 @@
 
 - (id)objectForInfoDictionaryKey:(NSString *)key
 {
-    return [self.infoDictionary objectForKey:key];
+    if (self.isMainBundle) {
+        // Common fast path - if we're updating the main bundle, that means our updater and host bundle's lifetime is the same
+        // If the bundle happens to be updated or change, that means our updater process needs to be terminated first to do it safely
+        // Thus we can rely on the cached Info dictionary
+        return [self.bundle objectForInfoDictionaryKey:key];
+    } else {
+        // Slow path - if we're updating another bundle, we should read in the most up to date Info dictionary because
+        // the bundle can be replaced externally or even by us.
+        // This is the easiest way to read the Info dictionary values *correctly* despite some performance loss.
+        // A mutable method to reload the Info dictionary at certain points and have it cached at other points is challenging to do correctly.
+        CFDictionaryRef cfInfoDictionary = CFBundleCopyInfoDictionaryInDirectory((CFURLRef)self.bundle.bundleURL);
+        NSDictionary *infoDictionary = CFBridgingRelease(cfInfoDictionary);
+        
+        return [infoDictionary objectForKey:key];
+    }
 }
 
 - (BOOL)boolForInfoDictionaryKey:(NSString *)key
