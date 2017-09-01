@@ -3631,6 +3631,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = FA1941CA0D94A70100DD942E /* ConfigFrameworkDebug.xcconfig */;
 			buildSettings = {
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 			};
 			name = Coverage;
 		};
@@ -3677,6 +3678,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = FA1941CA0D94A70100DD942E /* ConfigFrameworkDebug.xcconfig */;
 			buildSettings = {
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 			};
 			name = Debug;
 		};
@@ -3684,6 +3686,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = FA1941D10D94A70100DD942E /* ConfigFramework.xcconfig */;
 			buildSettings = {
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 			};
 			name = Release;
 		};
