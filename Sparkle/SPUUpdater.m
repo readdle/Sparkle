@@ -40,6 +40,8 @@ NSString *const SUUpdaterWillRestartNotification = @"SUUpdaterWillRestartNotific
 NSString *const SUUpdaterAppcastItemNotificationKey = @"SUUpdaterAppcastItemNotificationKey";
 NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotificationKey";
 
+NSString *const SUUpdaterWillCheckForUpdateNotification = @"SUUpdaterWillCheckForUpdateNotification";
+
 @interface SPUUpdater () <SPUUpdaterCycleDelegate, SPUUpdaterTimerDelegate>
 
 @property (readonly, copy) NSURL *parameterizedFeedURL;
@@ -495,6 +497,8 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
     if (self.driver != nil) {
         return;
     }
+    
+    [[NSNotificationCenter defaultCenter] postNotificationName:SUUpdaterWillCheckForUpdateNotification object:nil];
     
     [self.updaterTimer invalidate];
 

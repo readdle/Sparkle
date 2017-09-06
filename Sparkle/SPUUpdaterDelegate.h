@@ -35,6 +35,8 @@ SU_EXPORT extern NSString *const SUUpdaterAppcastItemNotificationKey;
 // Key for the SUAppcast object in the SUUpdaterDidFinishLoadingAppCastNotification userInfo
 SU_EXPORT extern NSString *const SUUpdaterAppcastNotificationKey;
 
+SU_EXPORT extern NSString *const SUUpdaterWillCheckForUpdateNotification;
+
 // -----------------------------------------------------------------------------
 //	SPUUpdater Delegate:
 // -----------------------------------------------------------------------------
