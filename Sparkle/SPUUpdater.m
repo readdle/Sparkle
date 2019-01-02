@@ -29,7 +29,7 @@
 #import "SPUUpdaterCycle.h"
 #import "SPUUpdaterTimer.h"
 #import "SPUResumableUpdate.h"
-
+#import "SUStandardVersionComparator.h"
 
 #include "AppKitPrevention.h"
 
@@ -808,5 +808,16 @@ NSString *const SUUpdaterWillCheckForUpdateNotification = @"SUUpdaterWillCheckFo
 }
 
 - (NSBundle *)hostBundle { return [self.host bundle]; }
+
+- (BOOL)shouldSkipUpdateForItem:(SUAppcastItem *)item {
+    NSString *skippedVersion = [self.host objectForUserDefaultsKey:SUSkippedVersionKey];
+    if (skippedVersion == nil) {
+        return NO;
+    }
+    
+    id<SUVersionComparison> comparator = [[SUStandardVersionComparator alloc] init];
+    BOOL result = [comparator compareVersion:[item versionString] toVersion:skippedVersion] != NSOrderedDescending;
+    return result;
+}
 
 @end

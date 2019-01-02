@@ -214,6 +214,10 @@ static NSMutableDictionary *sharedUpdaters = nil;
     return !self.userDriver.canCheckForUpdates;
 }
 
+- (BOOL)shouldSkipUpdateForItem:(SUAppcastItem *)item {
+    return [self.updater shouldSkipUpdateForItem:item];
+}
+
 // Not implemented properly at the moment - leaning towards it not be in the future
 // because it may be hard to implement properly (without passing a boolean flag everywhere), or
 // it would require us to maintain support for an additional class used by a very few people thus far

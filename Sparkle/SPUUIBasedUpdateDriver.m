@@ -133,7 +133,8 @@
                     case SPUSkipThisVersionChoice:
                         [self.coreDriver clearDownloadedUpdate];
                         [self.host setObject:[updateItem versionString] forUserDefaultsKey:SUSkippedVersionKey];
-                        // Fall through
+                        [self.delegate uiDriverIsRequestingAbortUpdateWithError:[NSError errorWithDomain:SUSparkleErrorDomain code:SUInstallationSkipVersionError userInfo:nil]];
+                        break;
                     case SPUInstallLaterChoice:
                         [self.delegate uiDriverIsRequestingAbortUpdateWithError:nil];
                         break;
@@ -150,7 +151,8 @@
                         break;
                     case SPUSkipThisVersionChoice:
                         [self.host setObject:[updateItem versionString] forUserDefaultsKey:SUSkippedVersionKey];
-                        // Fall through
+                        [self.delegate uiDriverIsRequestingAbortUpdateWithError:[NSError errorWithDomain:SUSparkleErrorDomain code:SUInstallationSkipVersionError userInfo:nil]];
+                        break;
                     case SPUInstallLaterChoice:
                         [self.delegate uiDriverIsRequestingAbortUpdateWithError:nil];
                         break;
@@ -274,7 +276,7 @@
                     abortUpdate();
                 });
             }];
-        } else if (error.code == SUInstallationCanceledError || error.code == SUInstallationAuthorizeLaterError) {
+        } else if (error.code == SUInstallationCanceledError || error.code == SUInstallationAuthorizeLaterError || error.code == SUInstallationSkipVersionError) {
             abortUpdate();
         } else {
             [self.userDriver showUpdaterError:nonNullError acknowledgement:^{

@@ -204,6 +204,8 @@ SU_EXPORT @interface SUUpdater : NSObject
  */
 @property (nonatomic, readonly) BOOL updateInProgress;
 
+- (BOOL)shouldSkipUpdateForItem:(SUAppcastItem *)item;
+
 @end
 
 #endif

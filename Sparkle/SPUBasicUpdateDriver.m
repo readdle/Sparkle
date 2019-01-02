@@ -177,7 +177,7 @@
     self.aborted = YES;
     
     if (error != nil) {
-        if (error.code != SUNoUpdateError && error.code != SUInstallationCanceledError && error.code != SUInstallationAuthorizeLaterError) { // Let's not bother logging this.
+        if (error.code != SUNoUpdateError && error.code != SUInstallationCanceledError && error.code != SUInstallationAuthorizeLaterError && error.code != SUInstallationSkipVersionError) { // Let's not bother logging this.
             NSError *errorToDisplay = error;
             int finiteRecursion=5;
             do {

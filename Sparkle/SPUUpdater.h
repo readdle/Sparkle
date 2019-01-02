@@ -204,6 +204,8 @@ SU_EXPORT @interface SPUUpdater : NSObject
  */
 - (void)resetUpdateCycle;
 
+- (BOOL)shouldSkipUpdateForItem:(SUAppcastItem *)item;
+
 @end
 
 NS_ASSUME_NONNULL_END

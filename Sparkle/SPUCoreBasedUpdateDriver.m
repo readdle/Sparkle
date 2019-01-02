@@ -349,7 +349,7 @@
     [self.installerDriver abortInstall];
     [self.downloadDriver cleanup];
     
-    id<SPUResumableUpdate> resumableUpdate = (error == nil || error.code == SUInstallationAuthorizeLaterError) ? self.resumableUpdate : nil;
+    id<SPUResumableUpdate> resumableUpdate = (error == nil || error.code == SUInstallationAuthorizeLaterError || error.code == SUInstallationSkipVersionError || error.code == SUInstallationSkipVersionError) ? self.resumableUpdate : nil;
     
     [self.basicDriver abortUpdateAndShowNextUpdateImmediately:shouldShowUpdateImmediately resumableUpdate:resumableUpdate error:error];
 }
