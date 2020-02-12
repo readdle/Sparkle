@@ -287,7 +287,7 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
     } else {
         NSLayoutConstraint *automaticallyInstallUpdatesButtonToDescriptionFieldConstraint = [NSLayoutConstraint constraintWithItem:self.automaticallyInstallUpdatesButton attribute:NSLayoutAttributeTop relatedBy:NSLayoutRelationEqual toItem:self.descriptionField attribute:NSLayoutAttributeBottom multiplier:1.0 constant:8.0];
         
-        [self.window.contentView addConstraint:automaticallyInstallUpdatesButtonToDescriptionFieldConstraint];
+        automaticallyInstallUpdatesButtonToDescriptionFieldConstraint.active = YES;
         
         [self.releaseNotesContainerView removeFromSuperview];
     }
@@ -297,7 +297,7 @@ static NSString *const SUUpdateAlertTouchBarIndentifier = @"" SPARKLE_BUNDLE_IDE
     if (showReleaseNotes && ![self allowsAutomaticUpdates]) {
         NSLayoutConstraint *skipButtonToReleaseNotesContainerConstraint = [NSLayoutConstraint constraintWithItem:self.skipButton attribute:NSLayoutAttributeTop relatedBy:NSLayoutRelationEqual toItem:self.releaseNotesContainerView attribute:NSLayoutAttributeBottom multiplier:1.0 constant:12.0];
         
-        [self.window.contentView addConstraint:skipButtonToReleaseNotesContainerConstraint];
+        skipButtonToReleaseNotesContainerConstraint.active = YES;
         
         [self.automaticallyInstallUpdatesButton removeFromSuperview];
     }
