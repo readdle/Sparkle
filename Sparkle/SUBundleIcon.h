@@ -16,6 +16,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (NSURL * _Nullable)iconURLForHost:(SUHost *)host;
 
++ (NSString * _Nullable)iconAssetNameForHost:(SUHost *)host;
+
 @end
 
 NS_ASSUME_NONNULL_END

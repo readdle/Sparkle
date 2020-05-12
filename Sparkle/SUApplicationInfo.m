@@ -21,7 +21,19 @@
 {
     NSURL *iconURL = [SUBundleIcon iconURLForHost:host];
     
-    NSImage *icon = (iconURL == nil) ? nil : [[NSImage alloc] initWithContentsOfURL:iconURL];
+    NSImage *icon = nil;
+    if (iconURL != nil) {
+        icon = [[NSImage alloc] initWithContentsOfURL:iconURL];
+    }
+    
+    if (!icon) {
+        // Apps linked against 10.13 or newer SDK can use app icon directly from asset catalog (see CFBundleIconName)
+        NSString *const iconAssetName = [SUBundleIcon iconAssetNameForHost:host];
+        if (iconAssetName != nil) {
+            icon = [NSImage imageNamed:iconAssetName];
+        }
+    }
+    
     // Use a default icon if none is defined.
     if (!icon) {
         // this asumption may not be correct (eg. even though we're not the main bundle, it could be still be a regular app)
