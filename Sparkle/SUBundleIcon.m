@@ -31,4 +31,13 @@
     return iconURL;
 }
 
++ (NSString *)iconAssetNameForHost:(SUHost *)host
+{
+    NSString *const name = [host objectForInfoDictionaryKey:@"CFBundleIconName"];
+    if (name == nil || ![name isKindOfClass:[NSString class]]) {
+        return nil;
+    }
+    return name;
+}
+
 @end
