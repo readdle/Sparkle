@@ -6,6 +6,8 @@
 //  Copyright © 2016 Sparkle Project. All rights reserved.
 //
 
+@import ImageIO;
+
 #import "SUInstallerLauncher.h"
 #import "SUFileManager.h"
 #import "SULog.h"
