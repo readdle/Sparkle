@@ -27,6 +27,7 @@
 #import "SUSystemUpdateInfo.h"
 #import "SUSignatures.h"
 #import "SUOperatingSystem.h"
+#import "SUGlobalUpdateLock.h"
 
 NSString *const SUUpdaterDidFinishLoadingAppCastNotification = @"SUUpdaterDidFinishLoadingAppCastNotification";
 NSString *const SUUpdaterDidFindValidUpdateNotification = @"SUUpdaterDidFindValidUpdateNotification";
@@ -39,6 +40,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 @property (strong) NSTimer *checkTimer;
 @property (assign) BOOL shouldRescheduleOnWake;
 @property (strong) NSBundle *sparkleBundle;
+@property (nonatomic) BOOL loggedNoSecureKeyWarning;
 
 - (instancetype)initForBundle:(NSBundle *)bundle;
 - (void)startUpdateCycle;
@@ -68,6 +70,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 @synthesize sparkleBundle;
 @synthesize decryptionPassword;
 @synthesize updateLastCheckedDate;
+@synthesize loggedNoSecureKeyWarning = _loggedNoSecureKeyWarning;
 
 static NSMutableDictionary *sharedUpdaters = nil;
 static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaultsObservationContext";
@@ -121,11 +124,11 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
     id updater = [sharedUpdaters objectForKey:[NSValue valueWithNonretainedObject:bundle]];
     if (updater)
-	{
+    {
         self = updater;
-	}
-	else if (self)
-	{
+    }
+    else if (self)
+    {
         if (sharedUpdaters == nil) {
             sharedUpdaters = [[NSMutableDictionary alloc] init];
         }
@@ -146,7 +149,9 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 }
 
 -(void)checkIfConfiguredProperly {
-    BOOL hasPublicKey = self.host.publicKeys.dsaPubKey != nil || self.host.publicKeys.ed25519PubKey != nil;
+    BOOL hasDSAPublicKey = (self.host.publicKeys.dsaPubKey != nil);
+    BOOL hasEdDSAPublicKey = (self.host.publicKeys.ed25519PubKey != nil);
+    BOOL hasPublicKey = (hasDSAPublicKey || hasEdDSAPublicKey);
     BOOL isMainBundle = [self.host.bundle isEqualTo:[NSBundle mainBundle]];
     BOOL hostIsCodeSigned = [SUCodeSigningVerifier bundleAtURLIsCodeSigned:self.host.bundle.bundleURL];
     NSURL *feedURL = [self feedURL];
@@ -164,7 +169,19 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
             } else if (!servingOverHttps) {
                 [self showAlertText:SULocalizedString(@"Auto-update not configured", nil)
                     informativeText:[NSString stringWithFormat:SULocalizedString(@"For security reasons, updates to %@ need to be served over HTTPS and/or signed with an EdDSA key. See https://sparkle-project.org/documentation/ for more information.", nil), name]];
+            } else {
+                if (!self.loggedNoSecureKeyWarning) {
+                    SULog(SULogLevelError, @"Error: Serving updates without an EdDSA key and only using Apple Code Signing is deprecated and may be unsupported in a future release. Visit Sparkle's documentation for more information: https://sparkle-project.org/documentation/#3-segue-for-security-concerns");
+                    
+                    self.loggedNoSecureKeyWarning = YES;
+                }
             }
+        }
+    } else if (!hasEdDSAPublicKey) {
+        if (!self.loggedNoSecureKeyWarning) {
+            SULog(SULogLevelError, @"Error: Serving updates without an EdDSA key is insecure and deprecated. DSA support may be removed in a future Sparkle release. Please migrate to using EdDSA (ed25519). Visit Sparkle's documentation for migration information: https://sparkle-project.org/documentation/#3-segue-for-security-concerns");
+            
+            self.loggedNoSecureKeyWarning = YES;
         }
     }
 
@@ -222,6 +239,8 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
         [self.host setBool:NO forUserDefaultsKey:SUUpdateRelaunchingMarkerKey];
     }
 
+    [[SUGlobalUpdateLock sharedLock] unlock];  // For safety, remove active lock if present in any case and not just when relaunching from an app update
+    
     if (shouldPrompt) {
         NSArray<NSDictionary<NSString *, NSString *> *> *profileInfo = [SUSystemProfiler systemProfileArrayForHost:self.host];
         // Always say we're sending the system profile here so that the delegate displays the parameters it would send.
@@ -248,8 +267,8 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
 - (void)updateDriverDidFinish:(NSNotification *)note
 {
-	if ([note object] == self.driver && [self.driver finished])
-	{
+    if ([note object] == self.driver && [self.driver finished])
+    {
         self.driver = nil;
         [self updateLastUpdateCheckDate];
         [self scheduleNextUpdateCheck];
@@ -276,16 +295,16 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
 - (void)scheduleNextUpdateCheck
 {
-	if (self.checkTimer)
-	{
+    if (self.checkTimer)
+    {
         [self.checkTimer invalidate];
         self.checkTimer = nil; // Timer is non-repeating, may have invalidated itself, so we had to retain it.
     }
-	if (![self automaticallyChecksForUpdates]) return;
+    if (![self automaticallyChecksForUpdates]) return;
 
     // How long has it been since last we checked for an update?
     NSDate *lastCheckDate = [self lastUpdateCheckDate];
-	if (!lastCheckDate) { lastCheckDate = [NSDate distantPast]; }
+    if (!lastCheckDate) { lastCheckDate = [NSDate distantPast]; }
     NSTimeInterval intervalSinceCheck = [[NSDate date] timeIntervalSinceDate:lastCheckDate];
 
     // Now we want to figure out how long until we check again.
@@ -320,13 +339,8 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 - (void)checkForUpdatesInBackground
 {
     BOOL automatic = [self automaticallyDownloadsUpdates];
-
     if (!automatic) {
-        if (SUAVAILABLE(10, 9)) {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability"
             NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.apple.notificationcenterui"];
-#pragma clang diagnostic pop
             BOOL dnd = [defaults boolForKey:@"doNotDisturb"];
             if (dnd) {
                 SULog(SULogLevelDefault, @"Delayed update, because Do Not Disturb is on");
@@ -334,7 +348,6 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
                 [self scheduleNextUpdateCheck];
                 return;
             }
-        }
     }
 
     // Do not use reachability for a preflight check. This can be deceptive and a bad idea. Apple does not recommend doing it.
@@ -376,13 +389,13 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
 - (void)checkForUpdatesWithDriver:(SUUpdateDriver *)d
 {
-	if ([self updateInProgress]) { return; }
-	if (self.checkTimer) { [self.checkTimer invalidate]; self.checkTimer = nil; }		// Timer is non-repeating, may have invalidated itself, so we had to retain it.
+    if ([self updateInProgress]) { return; }
+    if (self.checkTimer) { [self.checkTimer invalidate]; self.checkTimer = nil; }  // Timer is non-repeating, may have invalidated itself, so we had to retain it.
 
     [self updateLastUpdateCheckDate];
 
     if( [self.delegate respondsToSelector: @selector(updaterMayCheckForUpdates:)] && ![self.delegate updaterMayCheckForUpdates: self] )
-	{
+    {
         [self scheduleNextUpdateCheck];
         return;
     }
@@ -414,8 +427,8 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
 - (void)unregisterAsObserver
 {
-	@try
-	{
+    @try
+    {
         [[NSNotificationCenter defaultCenter] removeObserver:self];
         [[NSUserDefaultsController sharedUserDefaultsController] removeObserver:self forKeyPath:[@"values." stringByAppendingString:SUScheduledCheckIntervalKey]];
         [[NSUserDefaultsController sharedUserDefaultsController] removeObserver:self forKeyPath:[@"values." stringByAppendingString:SUEnableAutomaticChecksKey]];
@@ -428,7 +441,7 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
 {
-	if (context == (__bridge void *)(SUUpdaterDefaultsObservationContext))
+    if (context == (__bridge void *)(SUUpdaterDefaultsObservationContext))
     {
         // Allow a small delay, because perhaps the user or developer wants to change both preferences. This allows the developer to interpret a zero check interval as a sign to disable automatic checking.
         // Or we may get this from the developer and from our own KVO observation, this will effectively coalesce them.
@@ -482,7 +495,7 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
     }
 
     // Otherwise, automatically downloading updates is allowed. Does the user want it?
-    return [self.host boolForUserDefaultsKey:SUAutomaticallyUpdateKey];
+    return [self.host boolForKey:SUAutomaticallyUpdateKey];
 }
 
 - (void)setFeedURL:(NSURL *)feedURL
@@ -564,12 +577,12 @@ static NSString *escapeURLComponent(NSString *str) {
     if ([self.delegate respondsToSelector:@selector(feedParametersForUpdater:sendingSystemProfile:)]) {
         parameters = [parameters arrayByAddingObjectsFromArray:[self.delegate feedParametersForUpdater:self sendingSystemProfile:sendingSystemProfile]];
     }
-	if (sendingSystemProfile)
-	{
+    if (sendingSystemProfile)
+    {
         parameters = [parameters arrayByAddingObjectsFromArray:[SUSystemProfiler systemProfileArrayForHost:self.host]];
         [self.host setObject:[NSDate date] forUserDefaultsKey:SULastProfileSubmitDateKey];
     }
-	if ([parameters count] == 0) { return baseFeedURL; }
+    if ([parameters count] == 0) { return baseFeedURL; }
 
     // Build up the parameterized URL.
     NSMutableArray *parameterStrings = [NSMutableArray array];
@@ -612,7 +625,7 @@ static NSString *escapeURLComponent(NSString *str) {
 - (void)dealloc
 {
     [self unregisterAsObserver];
-	if (checkTimer) { [checkTimer invalidate]; }		// Timer is non-repeating, may have invalidated itself, so we had to retain it.
+    if (checkTimer) { [checkTimer invalidate]; }  // Timer is non-repeating, may have invalidated itself, so we had to retain it.
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem *)item

@@ -10,6 +10,7 @@
 #import "SUUpdateSettingsWindowController.h"
 #import "SUFileManager.h"
 #import "SUTestWebServer.h"
+#import "SUAdHocCodeSigning.h"
 #import "ed25519.h" // Run `git submodule update --init` if you get an error here
 
 @interface SUTestApplicationDelegate ()
@@ -97,6 +98,9 @@ static NSString * const UPDATED_VERSION = @"2.0";
     BOOL wroteInfoFile = [infoDictionary writeToURL:infoURL atomically:NO];
     assert(wroteInfoFile);
     
+    BOOL signedApp = [SUAdHocCodeSigning codeSignApplicationAtPath:destinationBundleURL.path];
+    assert(signedApp);
+    
     // Change current working directory so web server knows where to list files
     NSString *serverDirectoryPath = serverDirectoryURL.path;
     assert(serverDirectoryPath != nil);
@@ -129,7 +133,7 @@ static NSString * const UPDATED_VERSION = @"2.0";
     
     ed25519_sign(signature, archive.bytes, archive.length, public_key, self_sign_demo_only_insecure_hack);
     
-    NSString *signatureString = [[NSData dataWithBytes:signature length:64] base64Encoding];
+    NSString *signatureString = [[NSData dataWithBytes:signature length:64] base64EncodedStringWithOptions:0];
     
     // Obtain the file attributes to get the file size of our update later
     NSError *fileAttributesError = nil;

@@ -58,14 +58,18 @@ static NSString *const SUUpdatePermissionPromptTouchBarIndentifier = @"" SPARKLE
 - (instancetype)initWithHost:(SUHost *)aHost systemProfile:(NSArray *)profile reply:(void (^)(SUUpdatePermissionResponse *))reply
 {
     self = [super initWithWindowNibName:@"SUUpdatePermissionPrompt"];
-	if (self)
-	{
+    if (self)
+    {
         _reply = reply;
         host = aHost;
         self.isShowingMoreInfo = NO;
         self.shouldSendProfile = [self shouldAskAboutProfile];
         systemProfileInformationArray = profile;
         [self setShouldCascadeWindows:NO];
+    }
+    else
+    {
+        assert(false);
     }
     return self;
 }
@@ -75,11 +79,16 @@ static NSString *const SUUpdatePermissionPromptTouchBarIndentifier = @"" SPARKLE
     // If this is a background application we need to focus it in order to bring the prompt
     // to the user's attention. Otherwise the prompt would be hidden behind other applications and
     // the user would not know why the application was paused.
-	if ([SUApplicationInfo isBackgroundApplication:[NSApplication sharedApplication]]) {
+    if ([SUApplicationInfo isBackgroundApplication:[NSApplication sharedApplication]]) {
         [[NSApplication sharedApplication] activateIgnoringOtherApps:YES];
     }
 
+#pragma clang diagnostic push
+#if __has_warning("-Wcompletion-handler")
+#pragma clang diagnostic ignored "-Wcompletion-handler"
+#endif
     if (![NSApp modalWindow]) { // do not prompt if there is is another modal window on screen
+#pragma clang diagnostic pop
         SUUpdatePermissionPrompt *prompt = [(SUUpdatePermissionPrompt *)[[self class] alloc] initWithHost:host systemProfile:profile reply:reply];
         NSWindow *window = [prompt window];
         if (window) {
@@ -92,8 +101,8 @@ static NSString *const SUUpdatePermissionPromptTouchBarIndentifier = @"" SPARKLE
 
 - (void)windowDidLoad
 {
-	if (![self shouldAskAboutProfile])
-	{
+    if (![self shouldAskAboutProfile])
+    {
         NSRect frame = [[self window] frame];
         frame.size.height -= [self.moreInfoButton frame].size.height;
         [[self window] setFrame:frame display:YES];
@@ -128,8 +137,8 @@ static NSString *const SUUpdatePermissionPromptTouchBarIndentifier = @"" SPARKLE
     NSRect profileMoreInfoButtonFrame = [self.moreInfoButton frame];
     NSRect descriptionFrame = [self.descriptionTextField frame];
 
-	if (self.isShowingMoreInfo)
-	{
+    if (self.isShowingMoreInfo)
+    {
         // Add the subview
         contentViewFrame.size.height += profileMoreInfoViewFrame.size.height;
         profileMoreInfoViewFrame.origin.y = profileMoreInfoButtonFrame.origin.y - profileMoreInfoViewFrame.size.height;

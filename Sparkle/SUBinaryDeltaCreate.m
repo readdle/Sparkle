@@ -66,25 +66,23 @@ extern int bsdiff(int argc, const char **argv);
 
 @end
 
-#define INFO_HASH_KEY @"hash"
+#define INFO_PATH_KEY @"path"
 #define INFO_TYPE_KEY @"type"
 #define INFO_PERMISSIONS_KEY @"permissions"
 #define INFO_SIZE_KEY @"size"
 
 static NSDictionary *infoForFile(FTSENT *ent)
 {
-    NSData *hash = hashOfFileContents(ent);
-    if (!hash) {
-        return nil;
-    }
-
     off_t size = (ent->fts_info != FTS_D) ? ent->fts_statp->st_size : 0;
 
     assert(ent->fts_statp != NULL);
 
     mode_t permissions = ent->fts_statp->st_mode & PERMISSION_FLAGS;
 
-    return @{ INFO_HASH_KEY: hash,
+    NSString *path = @(ent->fts_path);
+    assert(path != nil);
+    
+    return @{ INFO_PATH_KEY: path != nil ? path : @"",
               INFO_TYPE_KEY: @(ent->fts_info),
               INFO_PERMISSIONS_KEY: @(permissions),
               INFO_SIZE_KEY: @(size) };
@@ -165,7 +163,7 @@ static NSString *temporaryPatchFile(NSString *patchFile)
 
 static BOOL shouldSkipDeltaCompression(NSDictionary *originalInfo, NSDictionary *newInfo)
 {
-    unsigned long long fileSize = [newInfo[INFO_SIZE_KEY] unsignedLongLongValue];
+    unsigned long long fileSize = [(NSNumber *)newInfo[INFO_SIZE_KEY] unsignedLongLongValue];
     if (fileSize < MIN_FILE_SIZE_FOR_CREATING_DELTA) {
         return YES;
     }
@@ -174,12 +172,19 @@ static BOOL shouldSkipDeltaCompression(NSDictionary *originalInfo, NSDictionary 
         return YES;
     }
 
-    if ([originalInfo[INFO_TYPE_KEY] unsignedShortValue] != [newInfo[INFO_TYPE_KEY] unsignedShortValue]) {
+    unsigned short originalInfoType = [(NSNumber *)originalInfo[INFO_TYPE_KEY] unsignedShortValue];
+    unsigned short newInfoType = [(NSNumber *)newInfo[INFO_TYPE_KEY] unsignedShortValue];
+    if (originalInfoType != newInfoType) {
+        // File types are different
         return YES;
     }
 
-    if ([originalInfo[INFO_HASH_KEY] isEqual:newInfo[INFO_HASH_KEY]]) {
-        // this is possible if just the permissions have changed
+    NSString *originalPath = originalInfo[INFO_PATH_KEY];
+    NSString *newPath = newInfo[INFO_PATH_KEY];
+
+    // Skip delta if both entries are directories, or if the files/symlinks are equal in content
+    if (originalInfoType == FTS_D || [[NSFileManager defaultManager] contentsEqualAtPath:originalPath andPath:newPath]) {
+        // this is possible if just the permissions have changed but contents have not
         return YES;
     }
 
@@ -192,7 +197,7 @@ static BOOL shouldDeleteThenExtract(NSDictionary *originalInfo, NSDictionary *ne
         return NO;
     }
 
-    if ([originalInfo[INFO_TYPE_KEY] unsignedShortValue] != [newInfo[INFO_TYPE_KEY] unsignedShortValue]) {
+    if ([(NSNumber *)originalInfo[INFO_TYPE_KEY] unsignedShortValue] != [(NSNumber *)newInfo[INFO_TYPE_KEY] unsignedShortValue]) {
         return YES;
     }
 
@@ -205,11 +210,20 @@ static BOOL shouldSkipExtracting(NSDictionary *originalInfo, NSDictionary *newIn
         return NO;
     }
 
-    if ([originalInfo[INFO_TYPE_KEY] unsignedShortValue] != [newInfo[INFO_TYPE_KEY] unsignedShortValue]) {
+    unsigned short originalInfoType = [(NSNumber *)originalInfo[INFO_TYPE_KEY] unsignedShortValue];
+    unsigned short newInfoType = [(NSNumber *)newInfo[INFO_TYPE_KEY] unsignedShortValue];
+    
+    if (originalInfoType != newInfoType) {
+        // File types are different
         return NO;
     }
-
-    if (![originalInfo[INFO_HASH_KEY] isEqual:newInfo[INFO_HASH_KEY]]) {
+    
+    NSString *originalPath = originalInfo[INFO_PATH_KEY];
+    NSString *newPath = newInfo[INFO_PATH_KEY];
+    
+    // Don't skip extract if files/symlinks entries are not equal in content
+    // (note if the entries are directories, they are equal)
+    if (originalInfoType != FTS_D && ![[NSFileManager defaultManager] contentsEqualAtPath:originalPath andPath:newPath]) {
         return NO;
     }
 
@@ -222,15 +236,61 @@ static BOOL shouldChangePermissions(NSDictionary *originalInfo, NSDictionary *ne
         return NO;
     }
 
-    if ([originalInfo[INFO_TYPE_KEY] unsignedShortValue] != [newInfo[INFO_TYPE_KEY] unsignedShortValue]) {
+    if ([(NSNumber *)originalInfo[INFO_TYPE_KEY] unsignedShortValue] != [(NSNumber *)newInfo[INFO_TYPE_KEY] unsignedShortValue]) {
         return NO;
     }
 
-    if ([originalInfo[INFO_PERMISSIONS_KEY] unsignedShortValue] == [newInfo[INFO_PERMISSIONS_KEY] unsignedShortValue]) {
+    if ([(NSNumber *)originalInfo[INFO_PERMISSIONS_KEY] unsignedShortValue] == [(NSNumber *)newInfo[INFO_PERMISSIONS_KEY] unsignedShortValue]) {
         return NO;
     }
 
     return YES;
+}
+
+static xar_file_t _xarAddFile(NSMutableDictionary<NSString *, NSValue *> *fileTable, xar_t x, NSString *relativePath, NSString *filePath)
+{
+    NSArray<NSString *> *rootRelativePathComponents = relativePath.pathComponents;
+    // Relative path must at least have starting "/" component and one more path component
+    if (rootRelativePathComponents.count < 2) {
+        return NULL;
+    }
+    
+    NSArray<NSString *> *relativePathComponents = [rootRelativePathComponents subarrayWithRange:NSMakeRange(1, rootRelativePathComponents.count - 1)];
+    
+    NSUInteger relativePathComponentsCount = relativePathComponents.count;
+    
+    // Build parent files as needed until we get to our final file we want to add
+    // So if we get "Contents/Resources/foo.txt", we will first add "Contents" parent,
+    // then "Resources" parent, then "foo.txt" as the final entry we want to add
+    // We store every file we add into a fileTable for easy referencing
+    // Note if a diff has Contents/Resources/foo/ and Contents/Resources/foo/bar.txt,
+    // due to sorting order we will add the foo directory first and won't end up with
+    // mis-ordering bugs
+    xar_file_t lastParent = NULL;
+    for (NSUInteger componentIndex = 0; componentIndex < relativePathComponentsCount; componentIndex++) {
+        NSArray<NSString *> *subpathComponents = [relativePathComponents subarrayWithRange:NSMakeRange(0, componentIndex + 1)];
+        NSString *subpathKey = [subpathComponents componentsJoinedByString:@"/"];
+        
+        xar_file_t cachedFile = [fileTable[subpathKey] pointerValue];
+        if (cachedFile != NULL) {
+            lastParent = cachedFile;
+        } else {
+            xar_file_t newParent;
+            
+            BOOL atLastIndex = (componentIndex == relativePathComponentsCount - 1);
+            
+            NSString *lastPathComponent = subpathComponents.lastObject;
+            if (atLastIndex && filePath != nil) {
+                newParent = xar_add_frompath(x, lastParent, lastPathComponent.fileSystemRepresentation, filePath.fileSystemRepresentation);
+            } else {
+                newParent = xar_add_frombuffer(x, lastParent, lastPathComponent.fileSystemRepresentation, "", 1);
+            }
+            
+            lastParent = newParent;
+            fileTable[subpathKey] = [NSValue valueWithPointer:newParent];
+        }
+    }
+    return lastParent;
 }
 
 BOOL createBinaryDelta(NSString *source, NSString *destination, NSString *patchFile, SUBinaryDeltaMajorVersion majorVersion, BOOL verbose, NSError *__autoreleasing *error)
@@ -379,7 +439,7 @@ BOOL createBinaryDelta(NSString *source, NSString *destination, NSString *patchF
         // We should also not allow files with code signed extended attributes since Apple doesn't recommend inserting these
         // inside an application, and since we don't preserve extended attribitutes anyway
 
-        mode_t permissions = [info[INFO_PERMISSIONS_KEY] unsignedShortValue];
+        mode_t permissions = [(NSNumber *)info[INFO_PERMISSIONS_KEY] unsignedShortValue];
         if (!isSymLink(ent) && !IS_VALID_PERMISSIONS(permissions)) {
             permissions = 0755;
             if (verbose) {
@@ -414,7 +474,7 @@ BOOL createBinaryDelta(NSString *source, NSString *destination, NSString *patchF
         } else {
             newTreeState[key] = info;
 
-            if (oldInfo && [oldInfo[INFO_TYPE_KEY] unsignedShortValue] == FTS_D && [info[INFO_TYPE_KEY] unsignedShortValue] != FTS_D) {
+            if (oldInfo && [(NSNumber *)oldInfo[INFO_TYPE_KEY] unsignedShortValue] == FTS_D && [(NSNumber *)info[INFO_TYPE_KEY] unsignedShortValue] != FTS_D) {
                 NSArray *parentPathComponents = key.pathComponents;
 
                 for (NSString *childPath in originalTreeState) {
@@ -486,11 +546,14 @@ BOOL createBinaryDelta(NSString *source, NSString *destination, NSString *patchF
 
       return originalTreeState[key1] ? NSOrderedAscending : NSOrderedDescending;
     }];
+    
+    NSMutableDictionary<NSString *, NSValue *> *fileTable = [NSMutableDictionary dictionary];
+    
     for (NSString *key in keys) {
         id value = [newTreeState valueForKey:key];
 
-        if ([value isEqual:[NSNull null]]) {
-            xar_file_t newFile = xar_add_frombuffer(x, 0, [key fileSystemRepresentation], (char *)"", 1);
+        if ([(NSObject *)value isEqual:[NSNull null]]) {
+            xar_file_t newFile = _xarAddFile(fileTable, x, key, NULL);
             assert(newFile);
             xar_prop_set(newFile, DELETE_KEY, "true");
 
@@ -505,17 +568,17 @@ BOOL createBinaryDelta(NSString *source, NSString *destination, NSString *patchF
         if (shouldSkipDeltaCompression(originalInfo, newInfo)) {
             if (MAJOR_VERSION_IS_AT_LEAST(majorVersion, SUBeigeMajorVersion) && shouldSkipExtracting(originalInfo, newInfo)) {
                 if (shouldChangePermissions(originalInfo, newInfo)) {
-                    xar_file_t newFile = xar_add_frombuffer(x, 0, [key fileSystemRepresentation], (char *)"", 1);
+                    xar_file_t newFile = _xarAddFile(fileTable, x, key, NULL);
                     assert(newFile);
-                    xar_prop_set(newFile, MODIFY_PERMISSIONS_KEY, [[NSString stringWithFormat:@"%u", [newInfo[INFO_PERMISSIONS_KEY] unsignedShortValue]] UTF8String]);
+                    xar_prop_set(newFile, MODIFY_PERMISSIONS_KEY, [[NSString stringWithFormat:@"%u", [(NSNumber *)newInfo[INFO_PERMISSIONS_KEY] unsignedShortValue]] UTF8String]);
 
                     if (verbose) {
-                        fprintf(stderr, "\n👮  %s %s (0%o -> 0%o)", VERBOSE_MODIFIED, [key fileSystemRepresentation], [originalInfo[INFO_PERMISSIONS_KEY] unsignedShortValue], [newInfo[INFO_PERMISSIONS_KEY] unsignedShortValue]);
+                        fprintf(stderr, "\n👮  %s %s (0%o -> 0%o)", VERBOSE_MODIFIED, [key fileSystemRepresentation], [(NSNumber *)originalInfo[INFO_PERMISSIONS_KEY] unsignedShortValue], [(NSNumber *)newInfo[INFO_PERMISSIONS_KEY] unsignedShortValue]);
                     }
                 }
             } else {
                 NSString *path = [destination stringByAppendingPathComponent:key];
-                xar_file_t newFile = xar_add_frompath(x, 0, [key fileSystemRepresentation], [path fileSystemRepresentation]);
+                xar_file_t newFile = _xarAddFile(fileTable, x, key, path);
                 assert(newFile);
 
                 if (shouldDeleteThenExtract(originalInfo, newInfo)) {
@@ -567,7 +630,7 @@ BOOL createBinaryDelta(NSString *source, NSString *destination, NSString *patchF
             fprintf(stderr, "\n🔨  %s %s", VERBOSE_DIFFED, [[operation relativePath] fileSystemRepresentation]);
         }
 
-        xar_file_t newFile = xar_add_frompath(x, 0, [[operation relativePath] fileSystemRepresentation], [resultPath fileSystemRepresentation]);
+        xar_file_t newFile = _xarAddFile(fileTable, x, [operation relativePath], resultPath);
         assert(newFile);
         xar_prop_set(newFile, BINARY_DELTA_KEY, "true");
         unlink([resultPath fileSystemRepresentation]);
