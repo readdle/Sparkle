@@ -9,12 +9,12 @@
 #import "SPUAutomaticUpdateDriver.h"
 #import "SPUUpdateDriver.h"
 #import "SUHost.h"
-#import "SPUUpdaterDelegate.h"
+#import <Sparkle/SPUUpdaterDelegate.h>
 #import "SPUCoreBasedUpdateDriver.h"
 #import "SULog.h"
 #import "SUAppcastItem.h"
-#import "SPUUserDriver.h"
-#import "SUErrors.h"
+#import <Sparkle/SPUUserDriver.h>
+#import <Sparkle/SUErrors.h>
 
 
 #include "AppKitPrevention.h"

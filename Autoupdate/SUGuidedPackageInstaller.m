@@ -8,7 +8,7 @@
 
 #import <sys/stat.h>
 #import "SUGuidedPackageInstaller.h"
-#import "SUErrors.h"
+#import <Sparkle/SUErrors.h>
 
 
 #include "AppKitPrevention.h"
@@ -40,7 +40,7 @@
     return YES;
 }
 
-- (BOOL)performFinalInstallation:(NSError * __autoreleasing *)error
+- (BOOL)performFinalInstallationProgressBlock:(nullable void(^)(double))__unused cb error:(NSError * __autoreleasing *)error
 {
     // This command *must* be run as root
     NSString *installerPath = @"/usr/sbin/installer";

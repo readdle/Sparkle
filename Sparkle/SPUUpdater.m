@@ -6,12 +6,12 @@
 //  Copyright 2006 Andy Matuschak. All rights reserved.
 //
 
-#import "SPUUpdater.h"
+#import <Sparkle/SPUUpdater.h>
 #import "SPUUpdaterDelegate.h"
 #import "SPUUpdaterSettings.h"
 #import "SUHost.h"
-#import "SPUUpdatePermissionRequest.h"
-#import "SUUpdatePermissionResponse.h"
+#import <Sparkle/SPUUpdatePermissionRequest.h>
+#import <Sparkle/SUUpdatePermissionResponse.h>
 #import "SPUUpdateDriver.h"
 #import "SUConstants.h"
 #import "SULog.h"
@@ -24,7 +24,7 @@
 #import "SPUProbeInstallStatus.h"
 #import "SUAppcastItem.h"
 #import "SPUInstallationInfo.h"
-#import "SUErrors.h"
+#import <Sparkle/SUErrors.h>
 #import "SPUXPCServiceInfo.h"
 #import "SPUUpdaterCycle.h"
 #import "SPUUpdaterTimer.h"
@@ -353,6 +353,9 @@ NSString *const SUUpdaterWillCheckForUpdateNotification = @"SUUpdaterWillCheckFo
         [self.userDriver showCanCheckForUpdates:YES];
         
         [self retrieveNextUpdateCheckInterval:^(NSTimeInterval updateCheckInterval) {
+            // This callback is asynchronous, so the timer may be set. Invalidate to make sure it isn't.
+            [self.updaterTimer invalidate];
+            
             // How long has it been since last we checked for an update?
             NSDate *lastCheckDate = [self lastUpdateCheckDate];
             if (!lastCheckDate) { lastCheckDate = [NSDate distantPast]; }
@@ -701,6 +704,13 @@ NSString *const SUUpdaterWillCheckForUpdateNotification = @"SUUpdaterWillCheckFo
     return [self.updaterSettings sendsSystemProfile];
 }
 
+static NSString *escapeURLComponent(NSString *str) {
+    return [[[[str stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]
+             stringByReplacingOccurrencesOfString:@"=" withString:@"%3d"]
+             stringByReplacingOccurrencesOfString:@"&" withString:@"%26"]
+             stringByReplacingOccurrencesOfString:@"+" withString:@"%2b"];
+}
+
 // Precondition: The feed URL should be valid
 - (NSURL * _Nullable)parameterizedFeedURL
 {
@@ -721,7 +731,7 @@ NSString *const SUUpdaterWillCheckForUpdateNotification = @"SUUpdaterWillCheckFo
     const NSTimeInterval oneWeek = 60 * 60 * 24 * 7;
     sendingSystemProfile &= (-[lastSubmitDate timeIntervalSinceNow] >= oneWeek);
 
-    NSArray *parameters = @[];
+    NSArray<NSDictionary<NSString *, NSString *> *> *parameters = @[];
     if ([self.delegate respondsToSelector:@selector(feedParametersForUpdater:sendingSystemProfile:)]) {
         NSArray *feedParameters = [self.delegate feedParametersForUpdater:self sendingSystemProfile:sendingSystemProfile];
         if (feedParameters != nil) {
@@ -737,8 +747,8 @@ NSString *const SUUpdaterWillCheckForUpdateNotification = @"SUUpdaterWillCheckFo
 
     // Build up the parameterized URL.
     NSMutableArray *parameterStrings = [NSMutableArray array];
-    for (NSDictionary *currentProfileInfo in parameters) {
-        [parameterStrings addObject:[NSString stringWithFormat:@"%@=%@", [[[currentProfileInfo objectForKey:@"key"] description] stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding], [[[currentProfileInfo objectForKey:@"value"] description] stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]]];
+    for (NSDictionary<NSString *, NSString *> *currentProfileInfo in parameters) {
+        [parameterStrings addObject:[NSString stringWithFormat:@"%@=%@", escapeURLComponent([[currentProfileInfo objectForKey:@"key"] description]), escapeURLComponent([[currentProfileInfo objectForKey:@"value"] description])]];
     }
 
     NSString *separatorCharacter = @"?";

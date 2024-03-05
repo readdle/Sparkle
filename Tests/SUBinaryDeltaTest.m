@@ -24,30 +24,36 @@ typedef void (^SUDeltaHandler)(NSFileManager *fileManager, NSString *sourceDirec
 
 - (void)testTemporaryDirectory
 {
-    NSString *tmp1 = temporaryDirectory(@"Sparkle");
-    NSString *tmp2 = temporaryDirectory(@"Sparkle");
+    NSString *tmp1 = temporaryDirectory(@"Sparklęエンジン");
+    NSString *tmp2 = temporaryDirectory(@"Sparklęエンジン");
     NSLog(@"Temporary directories: %@, %@", tmp1, tmp2);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wobjc-messaging-id"
     XCTAssertNotEqualObjects(tmp1, tmp2);
+#pragma clang diagnostic pop
     XCTAssert(YES, @"Pass");
 }
 
 - (void)testTemporaryFile
 {
-    NSString *tmp1 = temporaryFilename(@"Sparkle");
-    NSString *tmp2 = temporaryFilename(@"Sparkle");
+    NSString *tmp1 = temporaryFilename(@"Sparklęエンジン");
+    NSString *tmp2 = temporaryFilename(@"Sparklęエンジン");
     NSLog(@"Temporary files: %@, %@", tmp1, tmp2);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wobjc-messaging-id"
     XCTAssertNotEqualObjects(tmp1, tmp2);
+#pragma clang diagnostic pop
     XCTAssert(YES, @"Pass");
 }
 
 - (BOOL)createAndApplyPatchUsingVersion:(SUBinaryDeltaMajorVersion)majorVersion beforeDiffHandler:(SUDeltaHandler)beforeDiffHandler afterDiffHandler:(SUDeltaHandler)afterDiffHandler
 {
-    NSString *sourceDirectory = temporaryDirectory(@"Sparkle_temp1");
-    NSString *destinationDirectory = temporaryDirectory(@"Sparkle_temp2");
-    
-    NSString *diffFile = temporaryFilename(@"Sparkle_diff");
-    NSString *patchDirectory = temporaryDirectory(@"Sparkle_patch");
-    
+    NSString *sourceDirectory = temporaryDirectory(@"Spąrkle_temp1エンジン");
+    NSString *destinationDirectory = temporaryDirectory(@"Spąrkle_temp2エンジン");
+
+    NSString *diffFile = temporaryFilename(@"Spąrkle_diffエンジン");
+    NSString *patchDirectory = temporaryDirectory(@"Spąrkle_patchエンジン");
+
     XCTAssertNotNil(sourceDirectory);
     XCTAssertNotNil(destinationDirectory);
     XCTAssertNotNil(diffFile);
@@ -120,9 +126,9 @@ typedef void (^SUDeltaHandler)(NSFileManager *fileManager, NSString *sourceDirec
 {
     [self createAndApplyPatchWithHandler:^(NSFileManager *__unused fileManager, NSString *sourceDirectory, NSString *destinationDirectory) {
         NSData *emptyData = [NSData data];
-        NSString *sourceFile = [sourceDirectory stringByAppendingPathComponent:@"A"];
-        NSString *destinationFile = [destinationDirectory stringByAppendingPathComponent:@"A"];
-        
+        NSString *sourceFile = [sourceDirectory stringByAppendingPathComponent:@"AĄエンジン"];
+        NSString *destinationFile = [destinationDirectory stringByAppendingPathComponent:@"AĄエンジン"];
+
         XCTAssertTrue([emptyData writeToFile:sourceFile atomically:YES]);
         XCTAssertTrue([emptyData writeToFile:destinationFile atomically:YES]);
         

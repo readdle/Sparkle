@@ -21,7 +21,7 @@
 #import "SUFileManager.h"
 #import "SPUInstallationInfo.h"
 #import "SUAppcastItem.h"
-#import "SUErrors.h"
+#import <Sparkle/SUErrors.h>
 #import "SUInstallerCommunicationProtocol.h"
 #import "AgentConnection.h"
 #import "SPUInstallerAgentProtocol.h"
@@ -376,7 +376,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
                 return;
             }
             
-            if (![archiveAttributes[NSFileType] isEqualToString:NSFileTypeRegular]) {
+            if (![(NSString *)archiveAttributes[NSFileType] isEqualToString:NSFileTypeRegular]) {
                 SULog(SULogLevelError, @"Error: Received bad archive file type: %@", archiveAttributes[NSFileType]);
                 [self cleanupAndExitWithStatus:EXIT_FAILURE];
                 return;
@@ -550,7 +550,7 @@ static const NSTimeInterval SUDisplayProgressTimeDelay = 0.7;
             NSString *installationPath = [self.installer installationPath];
             
             NSError *thirdStageError = nil;
-            if (![self.installer performFinalInstallation:&thirdStageError]) {
+            if (![self.installer performFinalInstallationProgressBlock:nil error:&thirdStageError]) {
                 SULog(SULogLevelError, @"Failed to finalize installation with error: %@", thirdStageError);
                 
                 self.installer = nil;

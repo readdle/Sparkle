@@ -1,5 +1,7 @@
 .PHONY: all localizable-strings release build test ci
 
+all: build
+
 ifndef BUILDDIR
     BUILDDIR := $(shell mktemp -d "$(TMPDIR)/Sparkle.XXXXXX")
 endif
@@ -21,6 +23,7 @@ build:
 
 test:
 	xcodebuild -scheme Distribution -configuration Debug test
+	./objc_dep/objc_dep.py -t .
 
 uitest:
 	xcodebuild -scheme UITests -configuration Debug test

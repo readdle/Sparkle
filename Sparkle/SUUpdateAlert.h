@@ -10,8 +10,8 @@
 #define SUUPDATEALERT_H
 
 #import <Cocoa/Cocoa.h>
-#import "SUVersionDisplayProtocol.h"
-#import "SPUStatusCompletionResults.h"
+#import <Sparkle/SUVersionDisplayProtocol.h>
+#import <Sparkle/SPUStatusCompletionResults.h>
 
 @protocol SUUpdateAlertDelegate;
 
@@ -32,6 +32,7 @@
 - (IBAction)installUpdate:sender;
 - (IBAction)skipThisVersion:sender;
 - (IBAction)remindMeLater:sender;
+- (void)disableKeyboardShortcutForInstallButton;
 
 @end
 

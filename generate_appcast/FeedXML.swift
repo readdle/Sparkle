@@ -31,10 +31,6 @@ func text(_ text: String) -> XMLNode {
     return XMLNode.text(withStringValue: text) as! XMLNode
 }
 
-func linebreak(_ element: XMLElement) {
-    element.addChild(text("\n"));
-}
-
 
 func writeAppcast(appcastDestPath: URL, updates: [ArchiveItem]) throws {
     let appBaseName = updates[0].appPath.deletingPathExtension().lastPathComponent;
@@ -48,7 +44,7 @@ func writeAppcast(appcastDestPath: URL, updates: [ArchiveItem]) throws {
             XMLNode.Options.nodePreserveCDATA,
             XMLNode.Options.nodePreserveWhitespace,
         ];
-        doc = try XMLDocument(contentsOf: appcastDestPath, options: Int(options.rawValue));
+        doc = try XMLDocument(contentsOf: appcastDestPath, options: options);
     } catch {
         let root = XMLElement(name: "rss");
         root.addAttribute(XMLNode.attribute(withName: "xmlns:sparkle", stringValue: sparkleNS) as! XMLNode);
@@ -87,33 +83,44 @@ func writeAppcast(appcastDestPath: URL, updates: [ArchiveItem]) throws {
 
         if createNewItem {
             item = XMLElement.element(withName: "item") as! XMLElement;
-            linebreak(channel);
             channel.addChild(item);
         } else {
             item = existingItems[0] as! XMLElement;
         }
 
         if nil == findElement(name: "title", parent: item) {
-            linebreak(item);
             item.addChild(XMLElement.element(withName: "title", stringValue: update.shortVersion) as! XMLElement);
         }
         if nil == findElement(name: "pubDate", parent: item) {
-            linebreak(item);
             item.addChild(XMLElement.element(withName: "pubDate", stringValue: update.pubDate) as! XMLElement);
         }
 
-        var minVer = findElement(name: "sparkle:minimumSystemVersion", parent: item);
+        if let html = update.releaseNotesHTML {
+            let descElement = findOrCreateElement(name: "description", parent: item);
+            let cdata = XMLNode(kind:.text, options:.nodeIsCDATA);
+            cdata.stringValue = html;
+            descElement.setChildren([cdata]);
+        }
+
+        var minVer = findElement(name: SUAppcastElementMinimumSystemVersion, parent: item);
         if nil == minVer {
-            minVer = XMLElement.element(withName: "sparkle:minimumSystemVersion", uri: sparkleNS) as? XMLElement;
-            linebreak(item);
+            minVer = XMLElement.element(withName: SUAppcastElementMinimumSystemVersion, uri: sparkleNS) as? XMLElement;
             item.addChild(minVer!);
         }
         minVer?.setChildren([text(update.minimumSystemVersion)]);
 
+        let relElement = findElement(name: SUAppcastElementReleaseNotesLink, parent: item);
+        if let url = update.releaseNotesURL {
+            if nil == relElement {
+                item.addChild(XMLElement.element(withName: SUAppcastElementReleaseNotesLink, stringValue: url.absoluteString) as! XMLElement);
+            }
+        } else if let childIndex = relElement?.index {
+            item.removeChild(at: childIndex);
+        }
+
         var enclosure = findElement(name: "enclosure", parent: item);
         if nil == enclosure {
             enclosure = XMLElement.element(withName: "enclosure") as? XMLElement;
-            linebreak(item);
             item.addChild(enclosure!);
         }
 
@@ -122,47 +129,49 @@ func writeAppcast(appcastDestPath: URL, updates: [ArchiveItem]) throws {
         };
         var attributes = [
             XMLNode.attribute(withName: "url", stringValue: archiveURL) as! XMLNode,
-            XMLNode.attribute(withName: "sparkle:version", uri: sparkleNS, stringValue: update.version) as! XMLNode,
+            XMLNode.attribute(withName: SUAppcastAttributeVersion, uri: sparkleNS, stringValue: update.version) as! XMLNode,
+            XMLNode.attribute(withName: SUAppcastAttributeShortVersionString, uri: sparkleNS, stringValue: update.shortVersion) as! XMLNode,
             XMLNode.attribute(withName: "length", stringValue: String(update.fileSize)) as! XMLNode,
             XMLNode.attribute(withName: "type", stringValue: update.mimeType) as! XMLNode,
         ];
+        if let sig = update.edSignature {
+            attributes.append(XMLNode.attribute(withName: SUAppcastAttributeEDSignature, uri: sparkleNS, stringValue: sig) as! XMLNode);
+        }
         if let sig = update.dsaSignature {
-            attributes.append(XMLNode.attribute(withName: "sparkle:dsaSignature", uri: sparkleNS, stringValue: sig) as! XMLNode);
+            attributes.append(XMLNode.attribute(withName: SUAppcastAttributeDSASignature, uri: sparkleNS, stringValue: sig) as! XMLNode);
         }
         enclosure!.attributes = attributes;
 
         if update.deltas.count > 0 {
-            var deltas = findElement(name: "sparkle:deltas", parent: item);
+            var deltas = findElement(name: SUAppcastElementDeltas, parent: item);
             if nil == deltas {
-                deltas = XMLElement.element(withName: "sparkle:deltas", uri: sparkleNS) as? XMLElement;
-                linebreak(item);
+                deltas = XMLElement.element(withName: SUAppcastElementDeltas, uri: sparkleNS) as? XMLElement;
                 item.addChild(deltas!);
             } else {
                 deltas!.setChildren([]);
             }
             for delta in update.deltas {
                 var attributes = [
-                    XMLNode.attribute(withName: "url", stringValue: URL(string: delta.archivePath.lastPathComponent, relativeTo: update.archiveURL)!.absoluteString) as! XMLNode,
-                    XMLNode.attribute(withName: "sparkle:version", uri: sparkleNS, stringValue: update.version) as! XMLNode,
-                    XMLNode.attribute(withName: "sparkle:deltaFrom", uri: sparkleNS, stringValue: delta.fromVersion) as! XMLNode,
+                    XMLNode.attribute(withName: "url", stringValue: URL(string: delta.archivePath.lastPathComponent.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlPathAllowed)!, relativeTo: update.archiveURL)!.absoluteString) as! XMLNode,
+                    XMLNode.attribute(withName: SUAppcastAttributeVersion, uri: sparkleNS, stringValue: update.version) as! XMLNode,
+                    XMLNode.attribute(withName: SUAppcastAttributeShortVersionString, uri: sparkleNS, stringValue: update.shortVersion) as! XMLNode,
+                    XMLNode.attribute(withName: SUAppcastAttributeDeltaFrom, uri: sparkleNS, stringValue: delta.fromVersion) as! XMLNode,
                     XMLNode.attribute(withName: "length", stringValue: String(delta.fileSize)) as! XMLNode,
                     XMLNode.attribute(withName: "type", stringValue: "application/octet-stream") as! XMLNode,
-                    ];
-                if let sig = delta.dsaSignature {
-                    attributes.append(XMLNode.attribute(withName: "sparkle:dsaSignature", uri: sparkleNS, stringValue: sig) as! XMLNode);
+                ];
+                if let sig = delta.edSignature {
+                    attributes.append(XMLNode.attribute(withName: SUAppcastAttributeEDSignature, uri: sparkleNS, stringValue: sig) as! XMLNode);
                 }
-                linebreak(deltas!);
+                if let sig = delta.dsaSignature {
+                    attributes.append(XMLNode.attribute(withName: SUAppcastAttributeDSASignature, uri: sparkleNS, stringValue: sig) as! XMLNode);
+                }
                 deltas!.addChild(XMLNode.element(withName: "enclosure", children: nil, attributes: attributes) as! XMLElement);
             }
         }
-        if createNewItem {
-            linebreak(item);
-            linebreak(channel);
-        }
     }
 
-    let options = XMLNode.Options.nodeCompactEmptyElement;
-    let docData = doc.xmlData(withOptions:Int(options.rawValue));
-    let _ = try XMLDocument(data: docData, options:0); // Verify that it was generated correctly, which does not always happen!
+    let options: XMLNode.Options = [.nodeCompactEmptyElement, .nodePrettyPrint];
+    let docData = doc.xmlData(options:options);
+    let _ = try XMLDocument(data: docData, options:XMLNode.Options()); // Verify that it was generated correctly, which does not always happen!
     try docData.write(to: appcastDestPath);
 }

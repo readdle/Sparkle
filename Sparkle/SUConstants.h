@@ -23,6 +23,8 @@ extern const NSTimeInterval SUImpatientUpdateCheckInterval;
 
 extern NSString *const SUBundleIdentifier;
 
+extern NSString *const SUAppcastAttributeValueMacOS;
+
 // -----------------------------------------------------------------------------
 //	Notifications:
 // -----------------------------------------------------------------------------
@@ -35,13 +37,16 @@ extern NSString *const SUTechnicalErrorInformationKey;
 
 extern NSString *const SUFeedURLKey;
 extern NSString *const SUHasLaunchedBeforeKey;
+extern NSString *const SUUpdateRelaunchingMarkerKey;
 extern NSString *const SUShowReleaseNotesKey;
 extern NSString *const SUSkippedVersionKey;
 extern NSString *const SUScheduledCheckIntervalKey;
 extern NSString *const SULastCheckTimeKey;
 extern NSString *const SUExpectsDSASignatureKey;
+extern NSString *const SUExpectsEDSignatureKey;
 extern NSString *const SUPublicDSAKeyKey;
 extern NSString *const SUPublicDSAKeyFileKey;
+extern NSString *const SUPublicEDKeyKey;
 extern NSString *const SUAutomaticallyUpdateKey;
 extern NSString *const SUAllowsAutomaticUpdatesKey;
 extern NSString *const SUEnableAutomaticChecksKey;
@@ -49,7 +54,6 @@ extern NSString *const SUEnableSystemProfilingKey;
 extern NSString *const SUSendProfileInfoKey;
 extern NSString *const SULastProfileSubmitDateKey;
 extern NSString *const SUPromptUserOnFirstLaunchKey;
-extern NSString *const SUKeepDownloadOnFailedInstallKey;
 extern NSString *const SUDefaultsDomainKey;
 extern NSString *const SUEnableJavaScriptKey;
 extern NSString *const SUFixedHTMLDisplaySizeKey __attribute__((deprecated("This key is obsolete and has no effect.")));
@@ -64,8 +68,10 @@ extern NSString *const SURelaunchToolNameKey __attribute__((deprecated("This key
 
 extern NSString *const SUAppcastAttributeDeltaFrom;
 extern NSString *const SUAppcastAttributeDSASignature;
+extern NSString *const SUAppcastAttributeEDSignature;
 extern NSString *const SUAppcastAttributeShortVersionString;
 extern NSString *const SUAppcastAttributeVersion;
+extern NSString *const SUAppcastAttributeOsType;
 extern NSString *const SUAppcastAttributeInstallationType;
 
 extern NSString *const SUAppcastElementCriticalUpdate;

@@ -10,15 +10,15 @@
 #import "SPUDownloaderDelegate.h"
 #import "SPUDownloader.h"
 #import "SPUXPCServiceInfo.h"
-#import "SUAppcastItem.h"
+#import <Sparkle/SUAppcastItem.h>
 #import "SUFileManager.h"
 #import "SULocalizations.h"
 #import "SUHost.h"
 #import "SULog.h"
-#import "SUErrors.h"
+#import <Sparkle/SUErrors.h>
 #import "SPUURLRequest.h"
 #import "SPUDownloadedUpdate.h"
-#import "SPUDownloadData.h"
+#import <Sparkle/SPUDownloadData.h>
 
 
 #include "AppKitPrevention.h"
@@ -131,6 +131,8 @@
         self.connection = nil;
     }
     self.downloadName = nil;
+    
+    [self.downloader cancelDownload];
     self.downloader = nil;
 }
 

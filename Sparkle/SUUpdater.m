@@ -6,11 +6,11 @@
 //  Copyright 2006 Andy Matuschak. All rights reserved.
 //
 
-#import "SUUpdater.h"
-#import "SPUUpdater.h"
-#import "SPUStandardUserDriver.h"
-#import "SPUStandardUserDriverDelegate.h"
-#import "SPUUpdaterDelegate.h"
+#import <Sparkle/SUUpdater.h>
+#import <Sparkle/SPUUpdater.h>
+#import <Sparkle/SPUStandardUserDriver.h>
+#import <Sparkle/SPUStandardUserDriverDelegate.h>
+#import <Sparkle/SPUUpdaterDelegate.h>
 #import "SULog.h"
 
 @interface SUUpdater () <SPUUpdaterDelegate, SPUStandardUserDriverDelegate>
@@ -51,7 +51,7 @@ static NSMutableDictionary *sharedUpdaters = nil;
     if (bundle == nil) bundle = [NSBundle mainBundle];
     id updater = [sharedUpdaters objectForKey:[NSValue valueWithNonretainedObject:bundle]];
     if (updater == nil) {
-        updater = [[[self class] alloc] initForBundle:bundle];
+        updater = [(SUUpdater *)[[self class] alloc] initForBundle:bundle];
     }
     return updater;
 }
@@ -61,14 +61,14 @@ static NSMutableDictionary *sharedUpdaters = nil;
 {
     self = [super init];
     if (bundle == nil) bundle = [NSBundle mainBundle];
-    
+
     id updater = [sharedUpdaters objectForKey:[NSValue valueWithNonretainedObject:bundle]];
     if (updater)
-    {
+	{
         self = updater;
-    }
-    else if (self)
-    {
+	}
+	else if (self)
+	{
         if (sharedUpdaters == nil) {
             sharedUpdaters = [[NSMutableDictionary alloc] init];
         }
@@ -79,12 +79,16 @@ static NSMutableDictionary *sharedUpdaters = nil;
         // See -[SUUpdater _standardUserDriverRequestsPathToRelaunch] and -[SUUpdater _pathToRelaunchForUpdater:] implemented below which resolves this
         _userDriver = [[SPUStandardUserDriver alloc] initWithHostBundle:bundle delegate:self];
         _updater = [[SPUUpdater alloc] initWithHostBundle:bundle applicationBundle:bundle userDriver:_userDriver delegate:self];
-        
-        NSError *updaterError = nil;
-        if (![_updater startUpdater:&updaterError]) {
-            SULog(SULogLevelError, @"Error: Failed to start updater with error: %@", updaterError);
-            abort();
-        }
+
+        // Delay starting the updater, so that the host has a chance to configure the updater
+        // either in applicationWillFinishLaunching: or by setting properties right after initialisation
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSError *updaterError = nil;
+            if (![self.updater startUpdater:&updaterError]) {
+                SULog(SULogLevelError, @"Error: Failed to start updater with error: %@", updaterError);
+                abort();
+            }
+        });
     }
     return self;
 }
@@ -185,7 +189,7 @@ static NSMutableDictionary *sharedUpdaters = nil;
 {
     [self.updater checkForUpdates];
 }
-
+    
 - (BOOL)validateMenuItem:(NSMenuItem *)item
 {
     if ([item action] == @selector(checkForUpdates:)) {
@@ -228,8 +232,8 @@ static NSMutableDictionary *sharedUpdaters = nil;
         SULog(SULogLevelError, @"-[%@ installUpdatesIfAvailable] does not function anymore.. Instead a background scheduled update check will be done.", NSStringFromClass([self class]));
         
         self.loggedInstallUpdatesIfAvailableWarning = YES;
-    }
-    
+        }
+
     [self checkForUpdatesInBackground];
 }
 
@@ -329,7 +333,7 @@ static NSMutableDictionary *sharedUpdaters = nil;
 {
     if ([self.delegate respondsToSelector:@selector(updater:willDownloadUpdate:withRequest:)]) {
         [self.delegate updater:self willDownloadUpdate:item withRequest:request];
-    }
+        }
 }
 
 - (void)updater:(SPUUpdater *)__unused updater failedToDownloadUpdate:(SUAppcastItem *)item error:(NSError *)error
@@ -372,9 +376,9 @@ static NSMutableDictionary *sharedUpdaters = nil;
         
         // This invocation will retain self, but this instance is kept alive forever by our singleton pattern anyway
         [invocation setTarget:self];
-        
+
         self.postponedInstallHandler = installHandler;
-        
+
         shouldPostponeRelaunch = [self.delegate updater:self shouldPostponeRelaunchForUpdate:item untilInvoking:invocation];
     }
     
