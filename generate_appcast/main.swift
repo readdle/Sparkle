@@ -71,11 +71,13 @@ let DEFAULT_MAX_CDATA_THRESHOLD = 1000
 struct GenerateAppcast: ParsableCommand {
     static let programName = "generate_appcast"
     static let programNamePath: String = CommandLine.arguments.first ?? "./\(programName)"
-    static let cacheDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Sparkle_generate_appcast")
     static let oldFilesDirectoryName = "old_updates"
     
     static let DEFAULT_MAX_VERSIONS_PER_BRANCH_IN_FEED = 3
     static let DEFAULT_MAXIMUM_DELTAS = 5
+
+    @Option(name: .customLong("cache-directory"), help: ArgumentHelp("Directory where unpacked release versions are stored.", valueName: "cache-directory"), transform: { URL(fileURLWithPath: $0, isDirectory: true) })
+    var cacheDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Sparkle_generate_appcast")
     
     @Option(help: ArgumentHelp("The account name in your keychain associated with your private EdDSA (ed25519) key to use for signing new updates."))
     var account : String = "ed25519"
@@ -168,6 +170,18 @@ struct GenerateAppcast: ParsableCommand {
     @Flag(name: .customLong("disable-nested-code-check"), help: .hidden)
     var disableNestedCodeCheck: Bool = false
     
+    @Flag(name: .customLong("disable-permissions-check"), help: .hidden)
+    var disablePermissionsCheck: Bool = false
+    
+    @Option(name: .customLong("default-delta-version"), help: .hidden, transform: {
+        if let rawValue = UInt16(argument: $0),
+           let value = SUBinaryDeltaMajorVersion(rawValue: rawValue) {
+            return value
+        }
+        return SUBinaryDeltaMajorVersionDefault
+    })
+    var defaultDeltaVersion = SUBinaryDeltaMajorVersionDefault
+    
     static var configuration = CommandConfiguration(
         abstract: "Generate appcast from a directory of Sparkle update archives.",
         discussion: """
@@ -205,7 +219,7 @@ struct GenerateAppcast: ParsableCommand {
         
         For more advanced options that can be used for publishing updates, see https://sparkle-project.org/documentation/publishing/ for further documentation.
         
-        Extracted archives that are needed are cached in \((cacheDirectory.path as NSString).abbreviatingWithTildeInPath) to avoid re-computation in subsequent runs.
+        Extracted archives that are needed are cached in a cacheDirectory to avoid re-computation in subsequent runs.
                 
         Note that \(programName) does not support package-based (.pkg) updates.
         """)
@@ -309,7 +323,7 @@ struct GenerateAppcast: ParsableCommand {
         }
         
         do {
-            let appcastsByFeed = try makeAppcasts(archivesSourceDir: archivesSourceDir, outputPathURL: outputPathURL, cacheDirectory: GenerateAppcast.cacheDirectory, keys: keys, versions: versions, maxVersionsPerBranchInFeed: maxVersionsPerBranchInFeed, newChannel: channel, majorVersion: majorVersion, maximumDeltas: maximumDeltas, deltaCompressionModeDescription: deltaCompression, deltaCompressionLevel: deltaCompressionLevel, disableNestedCodeCheck: disableNestedCodeCheck, downloadURLPrefix: downloadURLPrefix, releaseNotesURLPrefix: releaseNotesURLPrefix, verbose: verbose)
+            let appcastsByFeed = try makeAppcasts(archivesSourceDir: archivesSourceDir, outputPathURL: outputPathURL, cacheDirectory: cacheDirectory, keys: keys, versions: versions, maxVersionsPerBranchInFeed: maxVersionsPerBranchInFeed, newChannel: channel, majorVersion: majorVersion, maximumDeltas: maximumDeltas, deltaCompressionModeDescription: deltaCompression, deltaCompressionLevel: deltaCompressionLevel, defaultDeltaVersion: defaultDeltaVersion, disableNestedCodeCheck: disableNestedCodeCheck, disablePermissionsCheck: disablePermissionsCheck, downloadURLPrefix: downloadURLPrefix, releaseNotesURLPrefix: releaseNotesURLPrefix, verbose: verbose)
             
             let oldFilesDirectory = archivesSourceDir.appendingPathComponent(GenerateAppcast.oldFilesDirectoryName)
             
@@ -333,7 +347,7 @@ struct GenerateAppcast: ParsableCommand {
                 print("Wrote \(numNewUpdates) new \(newUpdatesString), updated \(numExistingUpdates) existing \(existingUpdatesString), and removed \(numUpdatesRemoved) old \(removedUpdatesString) in \(appcastFile)")
             }
             
-            let (moveCount, prunedCount) = moveOldUpdatesFromAppcasts(archivesSourceDir: archivesSourceDir, oldFilesDirectory: oldFilesDirectory, cacheDirectory: GenerateAppcast.cacheDirectory, appcasts: Array(appcastsByFeed.values), autoPruneUpdates: autoPruneUpdates)
+            let (moveCount, prunedCount) = moveOldUpdatesFromAppcasts(archivesSourceDir: archivesSourceDir, oldFilesDirectory: oldFilesDirectory, cacheDirectory: cacheDirectory, appcasts: Array(appcastsByFeed.values), autoPruneUpdates: autoPruneUpdates)
             if moveCount > 0 {
                 print("Moved \(moveCount) old update \(pluralizeWord(moveCount, "file")) to \(oldFilesDirectory.lastPathComponent)")
             }

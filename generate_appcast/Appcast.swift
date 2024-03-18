@@ -23,7 +23,7 @@ struct Appcast {
     let deltaFromVersionsUsed: Set<UpdateVersion>
 }
 
-func makeAppcasts(archivesSourceDir: URL, outputPathURL: URL?, cacheDirectory cacheDir: URL, keys: PrivateKeys, versions: Set<String>?, maxVersionsPerBranchInFeed: Int, newChannel: String?, majorVersion: String?, maximumDeltas: Int, deltaCompressionModeDescription: String, deltaCompressionLevel: UInt8, disableNestedCodeCheck: Bool, downloadURLPrefix: URL?, releaseNotesURLPrefix: URL?, verbose: Bool) throws -> [FeedName: Appcast] {
+func makeAppcasts(archivesSourceDir: URL, outputPathURL: URL?, cacheDirectory cacheDir: URL, keys: PrivateKeys, versions: Set<String>?, maxVersionsPerBranchInFeed: Int, newChannel: String?, majorVersion: String?, maximumDeltas: Int, deltaCompressionModeDescription: String, deltaCompressionLevel: UInt8, defaultDeltaVersion: SUBinaryDeltaMajorVersion, disableNestedCodeCheck: Bool, disablePermissionsCheck: Bool, downloadURLPrefix: URL?, releaseNotesURLPrefix: URL?, verbose: Bool) throws -> [FeedName: Appcast] {
     let standardComparator = SUStandardVersionComparator()
     let descendingVersionComparator: (String, String) -> Bool = {
         return standardComparator.compareVersion($0, toVersion: $1) == .orderedDescending
@@ -292,7 +292,7 @@ func makeAppcasts(archivesSourceDir: URL, outputPathURL: URL?, cacheDirectory ca
                                 deltaVersion = .version2
                             }
                         } else {
-                            deltaVersion = SUBinaryDeltaMajorVersionDefault
+                            deltaVersion = defaultDeltaVersion
                             print("Warning: Sparkle.framework version for \(item.appPath.lastPathComponent) (\(item.shortVersion) (\(item.version))) was not found. Falling back to generating delta using default delta version..")
                         }
                         
@@ -326,7 +326,7 @@ func makeAppcasts(archivesSourceDir: URL, outputPathURL: URL?, cacheDirectory ca
                             deltaCompressionMode = requestedDeltaCompressionMode
                         }
                         
-                        delta = try DeltaUpdate.create(from: item, to: latestItem, deltaVersion: deltaVersion, deltaCompressionMode: deltaCompressionMode, deltaCompressionLevel: deltaCompressionLevel, archivePath: deltaPath)
+                        delta = try DeltaUpdate.create(from: item, to: latestItem, deltaVersion: deltaVersion, deltaCompressionMode: deltaCompressionMode, deltaCompressionLevel: deltaCompressionLevel, archivePath: deltaPath, disablePermissionsCheck: disablePermissionsCheck)
                     } catch {
                         print("Could not create delta update", deltaPath.path, error)
                         continue

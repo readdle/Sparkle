@@ -64,8 +64,9 @@ typedef void (^SUDeltaHandler)(NSFileManager *fileManager, NSString *sourceDirec
         beforeDiffHandler(fileManager, sourceDirectory, destinationDirectory);
     }
     
+    BOOL disablePermissionsCheck = NO;
     NSError *createDiffError = nil;
-    BOOL createdDiff = createBinaryDelta(sourceDirectory, destinationDirectory, diffFile, majorVersion, compressionMode, 0, NO, &createDiffError);
+    BOOL createdDiff = createBinaryDelta(sourceDirectory, destinationDirectory, diffFile, majorVersion, compressionMode, 0, disablePermissionsCheck, NO, &createDiffError);
     if (!createdDiff) {
         NSLog(@"Creating binary diff failed with error: %@", createDiffError);
     } else if (afterDiffHandler != nil) {

@@ -403,7 +403,7 @@ static NSString *cloneableRelativePath(NSDictionary<NSString *, NSData *> *after
     return nil;
 }
 
-BOOL createBinaryDelta(NSString *source, NSString *destination, NSString *patchFile, SUBinaryDeltaMajorVersion majorVersion, SPUDeltaCompressionMode compression, uint8_t compressionLevel, BOOL verbose, NSError *__autoreleasing *error)
+BOOL createBinaryDelta(NSString *source, NSString *destination, NSString *patchFile, SUBinaryDeltaMajorVersion majorVersion, SPUDeltaCompressionMode compression, uint8_t compressionLevel, BOOL disablePermissionsCheck, BOOL verbose, NSError *__autoreleasing *error)
 {
     assert(source);
     assert(destination);
@@ -470,7 +470,7 @@ BOOL createBinaryDelta(NSString *source, NSString *destination, NSString *patchF
         originalTreeState[key] = info;
 
         // Ensure Sparkle executable permissions are valid
-        if (ent->fts_info == FTS_F && [key.lastPathComponent isEqualToString:@"Sparkle"] && [key.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent.lastPathComponent isEqualToString:@"Sparkle.framework"]) {
+        if (!disablePermissionsCheck && ent->fts_info == FTS_F && [key.lastPathComponent isEqualToString:@"Sparkle"] && [key.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent.lastPathComponent isEqualToString:@"Sparkle.framework"]) {
             mode_t permissions = (mode_t)[(NSNumber *)info[INFO_PERMISSIONS_KEY] shortValue];
             if (permissions != VALID_SPARKLE_EXECUTABLE_PERMISSIONS) {
                 if (verbose) {
@@ -584,7 +584,7 @@ BOOL createBinaryDelta(NSString *source, NSString *destination, NSString *patchF
         }
 
         // Ensure Sparkle executable permissions are valid
-        if (ent->fts_info == FTS_F && [key.lastPathComponent isEqualToString:@"Sparkle"] && [key.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent.lastPathComponent isEqualToString:@"Sparkle.framework"]) {
+        if (!disablePermissionsCheck && ent->fts_info == FTS_F && [key.lastPathComponent isEqualToString:@"Sparkle"] && [key.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent.lastPathComponent isEqualToString:@"Sparkle.framework"]) {
             mode_t permissions = (mode_t)[(NSNumber *)info[INFO_PERMISSIONS_KEY] shortValue];
             if (permissions != VALID_SPARKLE_EXECUTABLE_PERMISSIONS) {
                 if (verbose) {

@@ -189,9 +189,10 @@
             unsigned char signature[64];
             
             if ([testMode isEqualToString:@"DELTA"]) {
+                BOOL disablePermissionsCheck = NO;
                 NSError *deltaCreationError = nil;
                 NSURL *patchURL = [serverDirectoryURL URLByAppendingPathComponent:@"patch.delta"];
-                if (!createBinaryDelta(bundleURL.path, destinationBundleURL.path, patchURL.path, SUBinaryDeltaMajorVersionDefault, SPUDeltaCompressionModeDefault, 0, NO, &deltaCreationError)) {
+                if (!createBinaryDelta(bundleURL.path, destinationBundleURL.path, patchURL.path, SUBinaryDeltaMajorVersionDefault, SPUDeltaCompressionModeDefault, 0, disablePermissionsCheck, NO, &deltaCreationError)) {
                     NSLog(@"Failed to create binary delta patch: %@", deltaCreationError);
                     abort();
                 }

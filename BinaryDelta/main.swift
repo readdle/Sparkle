@@ -115,8 +115,9 @@ struct Create: ParsableCommand {
             throw ExitCode(1)
         }
         
+        let disablePermissionsCheck = false
         var createDiffError: NSError? = nil
-        if !createBinaryDelta(beforeTree, afterTree, patchFile, majorDeltaVersion, compressionMode, compressionLevel, verbose, &createDiffError) {
+        if !createBinaryDelta(beforeTree, afterTree, patchFile, majorDeltaVersion, compressionMode, compressionLevel,  disablePermissionsCheck, verbose, &createDiffError) {
             if let error = createDiffError {
                 fputs("\(error.localizedDescription)\n", stderr)
             } else {
