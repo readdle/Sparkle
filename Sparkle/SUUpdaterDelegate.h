@@ -155,6 +155,14 @@ SU_EXPORT extern NSString *const SUUpdaterAppcastNotificationKey;
 - (void)userDidCancelDownload:(SUUpdater *)updater;
 
 /*!
+ Called after the update archive has been successfully extracted.
+ 
+ \param updater The SUUpdater instance.
+ \param item The appcast item corresponding to the update that was extracted.
+ */
+- (void)updater:(SUUpdater *)updater didExtractUpdate:(SUAppcastItem *)item;
+
+/*!
  Called immediately before installing the specified update.
  
  \param updater The SUUpdater instance.

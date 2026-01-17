@@ -346,6 +346,13 @@ static NSMutableDictionary *sharedUpdaters = nil;
     }
 }
 
+- (void)updater:(SPUUpdater *)__unused updater didExtractUpdate:(SUAppcastItem *)item
+{
+    if ([self.delegate respondsToSelector:@selector(updater:didExtractUpdate:)]) {
+        [self.delegate updater:self didExtractUpdate:item];
+    }
+}
+
 - (void)updater:(SPUUpdater *)__unused updater willInstallUpdate:(SUAppcastItem *)item
 {
     if ([self.delegate respondsToSelector:@selector(updater:willInstallUpdate:)]) {

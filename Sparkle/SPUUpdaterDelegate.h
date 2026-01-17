@@ -194,6 +194,14 @@ typedef NS_ENUM(NSInteger, SPUUpdateCheck)
 - (void)userDidCancelDownload:(SPUUpdater *)updater;
 
 /*!
+ Called after the update archive has been successfully extracted.
+ 
+ \param updater The updater instance.
+ \param item The appcast item corresponding to the update that was extracted.
+ */
+- (void)updater:(SPUUpdater *)updater didExtractUpdate:(SUAppcastItem *)item;
+
+/*!
  Called immediately before installing the specified update.
  
  \param updater The updater instance.
