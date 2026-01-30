@@ -351,13 +351,6 @@ static NSMutableDictionary *sharedUpdaters = nil;
     }
 }
 
-- (void)updater:(SPUUpdater *)__unused updater didExtractUpdate:(SUAppcastItem *)item
-{
-    if ([self.delegate respondsToSelector:@selector(updater:didExtractUpdate:)]) {
-        [self.delegate updater:self didExtractUpdate:item];
-    }
-}
-
 - (void)updater:(SPUUpdater *)__unused updater willInstallUpdate:(SUAppcastItem *)item
 {
     if ([self.delegate respondsToSelector:@selector(updater:willInstallUpdate:)]) {
@@ -476,13 +469,6 @@ static NSMutableDictionary *sharedUpdaters = nil;
 {
     if ([self.delegate respondsToSelector:@selector(updater:didAbortWithError:)]) {
         [self.delegate updater:self didAbortWithError:error];
-    }
-}
-
-- (void)updater:(SPUUpdater *)__unused updater didFinishInstallation:(SUAppcastItem *)item
-{
-    if ([self.delegate respondsToSelector:@selector(updater:didFinishInstallation:)]) {
-        [self.delegate updater:self didFinishInstallation:item];
     }
 }
 

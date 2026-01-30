@@ -194,14 +194,6 @@ typedef NS_ENUM(NSInteger, SPUUpdateCheck)
 - (void)userDidCancelDownload:(SPUUpdater *)updater;
 
 /*!
- Called after the update archive has been successfully extracted.
- 
- \param updater The updater instance.
- \param item The appcast item corresponding to the update that was extracted.
- */
-- (void)updater:(SPUUpdater *)updater didExtractUpdate:(SUAppcastItem *)item;
-
-/*!
  Called immediately before installing the specified update.
  
  \param updater The updater instance.
@@ -309,18 +301,6 @@ typedef NS_ENUM(NSInteger, SPUUpdateCheck)
  \param error The error that caused the abort
  */
 - (void)updater:(SPUUpdater *)updater didAbortWithError:(NSError *)error;
-
-/*!
- Called after the update installation has finished successfully.
- 
- This is called when the installation process has completed (after Stage 3).
- The application may or may not have been relaunched yet, depending on whether
- the update was configured to relaunch automatically.
- 
- \param updater The updater instance.
- \param item The appcast item corresponding to the update that was installed.
- */
-- (void)updater:(SPUUpdater *)updater didFinishInstallation:(SUAppcastItem *)item;
 
 @end
 

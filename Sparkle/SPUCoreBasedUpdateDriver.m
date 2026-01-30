@@ -231,12 +231,6 @@
         if (error != nil) {
             [self.delegate coreDriverIsRequestingAbortUpdateWithError:error];
         } else {
-
-            // Notify delegate that extraction is starting
-            if (downloadedUpdate.updateItem != nil && self.updaterDelegate != nil && [self.updaterDelegate respondsToSelector:@selector(updater:didExtractUpdate:)]) {
-                [self.updaterDelegate updater:self.updater didExtractUpdate:downloadedUpdate.updateItem];
-            }
-
             // If the installer started properly, we can't use the downloaded update archive anymore
             // Especially if the installer fails later and we try resuming the update with a missing archive file
             [self clearDownloadedUpdate];
@@ -310,11 +304,6 @@
 
 - (void)installerDidFinishInstallationWithAcknowledgement:(void(^)(void))acknowledgement
 {
-    // Notify delegate that installation finished
-    if ([self.updaterDelegate respondsToSelector:@selector(updater:didFinishInstallation:)]) {
-        [self.updaterDelegate updater:self.updater didFinishInstallation:self.updateItem];
-    }
-    
     if ([self.delegate respondsToSelector:@selector(installerDidFinishInstallationWithAcknowledgement:)]) {
         [self.delegate installerDidFinishInstallationWithAcknowledgement:acknowledgement];
     } else {

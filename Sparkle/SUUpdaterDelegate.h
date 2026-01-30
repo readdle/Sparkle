@@ -155,14 +155,6 @@ SU_EXPORT extern NSString *const SUUpdaterAppcastNotificationKey;
 - (void)userDidCancelDownload:(SUUpdater *)updater;
 
 /*!
- Called after the update archive has been successfully extracted.
- 
- \param updater The SUUpdater instance.
- \param item The appcast item corresponding to the update that was extracted.
- */
-- (void)updater:(SUUpdater *)updater didExtractUpdate:(SUAppcastItem *)item;
-
-/*!
  Called immediately before installing the specified update.
  
  \param updater The SUUpdater instance.
@@ -297,18 +289,6 @@ SU_EXPORT extern NSString *const SUUpdaterAppcastNotificationKey;
  \param error The error that caused the abort
  */
 - (void)updater:(SUUpdater *)updater didAbortWithError:(NSError *)error;
-
-/*!
- Called after the update installation has finished successfully.
- 
- This is called when the installation process has completed (after Stage 3).
- The application may or may not have been relaunched yet, depending on whether
- the update was configured to relaunch automatically.
- 
- \param updater The SUUpdater instance.
- \param item The appcast item corresponding to the update that was installed.
- */
-- (void)updater:(SUUpdater *)updater didFinishInstallation:(SUAppcastItem *)item;
 
 @end
 
