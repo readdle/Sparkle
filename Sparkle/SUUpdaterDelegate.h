@@ -254,9 +254,23 @@ SU_EXPORT extern NSString *const SUUpdaterAppcastNotificationKey;
  
  \param updater The SUUpdater instance.
  \param item The appcast item corresponding to the update that is proposed to be installed.
- \param invocation Can be used to trigger an immediate silent install and relaunch.
+ \param immediateInstallationBlock Can be called to trigger an immediate silent install and relaunch.
  */
-- (void)updater:(SUUpdater *)updater willInstallUpdateOnQuit:(SUAppcastItem *)item immediateInstallationInvocation:(NSInvocation *)invocation;
+- (void)updater:(SUUpdater *)updater willInstallUpdateOnQuit:(SUAppcastItem *)item immediateInstallationBlock:(void (^)(void))immediateInstallationBlock;
+
+/*!
+ Called when an update is scheduled to be silently installed on quit.
+ 
+ This is after an update has been automatically downloaded in the background.
+ (i.e. SUUpdater::automaticallyDownloadsUpdates is YES)
+ 
+ \param updater The SUUpdater instance.
+ \param item The appcast item corresponding to the update that is proposed to be installed.
+ \param invocation Can be used to trigger an immediate silent install and relaunch.
+ 
+ \deprecated Use updater:willInstallUpdateOnQuit:immediateInstallationBlock: instead. NSInvocation is not available in Swift.
+ */
+- (void)updater:(SUUpdater *)updater willInstallUpdateOnQuit:(SUAppcastItem *)item immediateInstallationInvocation:(NSInvocation *)invocation __deprecated_msg("Use updater:willInstallUpdateOnQuit:immediateInstallationBlock: instead");
 
 /*!
  Calls after an update that was scheduled to be silently installed on quit has been canceled.

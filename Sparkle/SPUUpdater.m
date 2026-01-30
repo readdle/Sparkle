@@ -22,6 +22,10 @@
 #import "SPUUserInitiatedUpdateDriver.h"
 #import "SPUAutomaticUpdateDriver.h"
 #import "SPUProbeInstallStatus.h"
+#import "SPUUIBasedUpdateDriver.h"
+#import "SPUStatusCompletionResults.h"
+#import "SPUCoreBasedUpdateDriver.h"
+#import "SPUInstallerDriver.h"
 #import "SUAppcastItem.h"
 #import "SPUInstallationInfo.h"
 #import "SUErrors.h"
@@ -490,6 +494,15 @@ NSString *const SUUpdaterWillCheckForUpdateNotification = @"SUUpdaterWillCheckFo
             }
         });
     }];
+}
+
+- (void)abortCurrentUpdateCycle
+{
+    if (self.driver != nil) {
+        SULog(SULogLevelDefault, @"Aborting current update cycle");
+        [self.driver abortUpdate];
+        self.driver = nil;
+    }
 }
 
 - (void)checkForUpdatesWithDriver:(id <SPUUpdateDriver> )d installerInProgress:(BOOL)installerInProgress preventsInstallerInteraction:(BOOL)preventsInstallerInteraction
