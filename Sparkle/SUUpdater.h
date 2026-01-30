@@ -89,6 +89,15 @@ SU_EXPORT @interface SUUpdater : NSObject
 - (void)checkForUpdatesInBackground;
 
 /*!
+ Aborts any currently running update check or download.
+ 
+ This is useful when you want to ensure a clean state before starting a new
+ user-initiated update check, for example if automatic background checks might
+ be running.
+ */
+- (void)abortCurrentUpdateCycle;
+
+/*!
  A property indicating whether or not to check for updates automatically.
  
  Setting this property will persist in the host bundle's user defaults.

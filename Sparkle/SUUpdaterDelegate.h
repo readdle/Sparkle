@@ -155,6 +155,14 @@ SU_EXPORT extern NSString *const SUUpdaterAppcastNotificationKey;
 - (void)userDidCancelDownload:(SUUpdater *)updater;
 
 /*!
+ Called after the update archive has been successfully extracted.
+ 
+ \param updater The SUUpdater instance.
+ \param item The appcast item corresponding to the update that was extracted.
+ */
+- (void)updater:(SUUpdater *)updater didExtractUpdate:(SUAppcastItem *)item;
+
+/*!
  Called immediately before installing the specified update.
  
  \param updater The SUUpdater instance.
@@ -254,9 +262,23 @@ SU_EXPORT extern NSString *const SUUpdaterAppcastNotificationKey;
  
  \param updater The SUUpdater instance.
  \param item The appcast item corresponding to the update that is proposed to be installed.
- \param invocation Can be used to trigger an immediate silent install and relaunch.
+ \param immediateInstallationBlock Can be called to trigger an immediate silent install and relaunch.
  */
-- (void)updater:(SUUpdater *)updater willInstallUpdateOnQuit:(SUAppcastItem *)item immediateInstallationInvocation:(NSInvocation *)invocation;
+- (void)updater:(SUUpdater *)updater willInstallUpdateOnQuit:(SUAppcastItem *)item immediateInstallationBlock:(void (^)(void))immediateInstallationBlock;
+
+/*!
+ Called when an update is scheduled to be silently installed on quit.
+ 
+ This is after an update has been automatically downloaded in the background.
+ (i.e. SUUpdater::automaticallyDownloadsUpdates is YES)
+ 
+ \param updater The SUUpdater instance.
+ \param item The appcast item corresponding to the update that is proposed to be installed.
+ \param invocation Can be used to trigger an immediate silent install and relaunch.
+ 
+ \deprecated Use updater:willInstallUpdateOnQuit:immediateInstallationBlock: instead. NSInvocation is not available in Swift.
+ */
+- (void)updater:(SUUpdater *)updater willInstallUpdateOnQuit:(SUAppcastItem *)item immediateInstallationInvocation:(NSInvocation *)invocation __deprecated_msg("Use updater:willInstallUpdateOnQuit:immediateInstallationBlock: instead");
 
 /*!
  Calls after an update that was scheduled to be silently installed on quit has been canceled.
@@ -275,6 +297,18 @@ SU_EXPORT extern NSString *const SUUpdaterAppcastNotificationKey;
  \param error The error that caused the abort
  */
 - (void)updater:(SUUpdater *)updater didAbortWithError:(NSError *)error;
+
+/*!
+ Called after the update installation has finished successfully.
+ 
+ This is called when the installation process has completed (after Stage 3).
+ The application may or may not have been relaunched yet, depending on whether
+ the update was configured to relaunch automatically.
+ 
+ \param updater The SUUpdater instance.
+ \param item The appcast item corresponding to the update that was installed.
+ */
+- (void)updater:(SUUpdater *)updater didFinishInstallation:(SUAppcastItem *)item;
 
 @end
 

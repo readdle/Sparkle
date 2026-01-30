@@ -199,6 +199,11 @@ static NSMutableDictionary *sharedUpdaters = nil;
     [self.updater checkForUpdatesInBackground];
 }
 
+- (void)abortCurrentUpdateCycle
+{
+    [self.updater abortCurrentUpdateCycle];
+}
+
 - (NSDate *)lastUpdateCheckDate
 {
     return self.updater.lastUpdateCheckDate;
@@ -346,6 +351,13 @@ static NSMutableDictionary *sharedUpdaters = nil;
     }
 }
 
+- (void)updater:(SPUUpdater *)__unused updater didExtractUpdate:(SUAppcastItem *)item
+{
+    if ([self.delegate respondsToSelector:@selector(updater:didExtractUpdate:)]) {
+        [self.delegate updater:self didExtractUpdate:item];
+    }
+}
+
 - (void)updater:(SPUUpdater *)__unused updater willInstallUpdate:(SUAppcastItem *)item
 {
     if ([self.delegate respondsToSelector:@selector(updater:willInstallUpdate:)]) {
@@ -433,7 +445,16 @@ static NSMutableDictionary *sharedUpdaters = nil;
 {
     BOOL installationHandledByDelegate = NO;
     
-    if ([self.delegate respondsToSelector:@selector(updater:willInstallUpdateOnQuit:immediateInstallationInvocation:)]) {
+    // First try the new block-based method (Swift-compatible)
+    if ([self.delegate respondsToSelector:@selector(updater:willInstallUpdateOnQuit:immediateInstallationBlock:)]) {
+        // Pass the block directly - this works perfectly in Swift!
+        [self.delegate updater:self willInstallUpdateOnQuit:item immediateInstallationBlock:immediateInstallHandler];
+        
+        // Assume delegate will handle the installation
+        installationHandledByDelegate = YES;
+    }
+    // Fall back to the old NSInvocation-based method (deprecated, Objective-C only)
+    else if ([self.delegate respondsToSelector:@selector(updater:willInstallUpdateOnQuit:immediateInstallationInvocation:)]) {
         NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:[[self class] instanceMethodSignatureForSelector:@selector(finishSilentInstallation)]];
         
         // This invocation will retain self, but this instance is kept alive forever by our singleton pattern anyway
@@ -455,6 +476,13 @@ static NSMutableDictionary *sharedUpdaters = nil;
 {
     if ([self.delegate respondsToSelector:@selector(updater:didAbortWithError:)]) {
         [self.delegate updater:self didAbortWithError:error];
+    }
+}
+
+- (void)updater:(SPUUpdater *)__unused updater didFinishInstallation:(SUAppcastItem *)item
+{
+    if ([self.delegate respondsToSelector:@selector(updater:didFinishInstallation:)]) {
+        [self.delegate updater:self didFinishInstallation:item];
     }
 }
 
